@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
+import { mountFluidSurface } from "./flow/WebGLFluidBackdrop";
 
 type Modality = "text" | "image" | "file";
 
@@ -46,134 +47,8 @@ function FlowBackdrop() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const gl = canvas?.getContext("webgl2", { alpha: true, antialias: false, premultipliedAlpha: false });
-    if (!canvas || !gl) return;
-
-    const vertexSource = `#version 300 es
-      in vec2 a_position;
-      void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
-    `;
-    const fragmentSource = `#version 300 es
-      precision highp float;
-      uniform vec2 u_resolution;
-      uniform float u_time;
-      out vec4 out_color;
-
-      float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-      }
-
-      float noise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
-      }
-
-      float fbm(vec2 p) {
-        float value = 0.0;
-        float amplitude = 0.5;
-        for (int i = 0; i < 4; i++) {
-          value += amplitude * noise(p);
-          p = p * 2.02 + vec2(9.1, 3.7);
-          amplitude *= 0.5;
-        }
-        return value;
-      }
-
-      void main() {
-        vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-        float time = u_time * 0.09;
-        float current = 0.5 + sin(uv.y * 7.0 + sin(time + uv.y * 1.8) * 0.55) * 0.052 + sin(uv.y * 17.0 - time * 1.4) * 0.009;
-        float width = 0.39 + sin(uv.y * 3.7 - time * 0.24) * 0.016;
-        float distance_to_current = abs(uv.x - current);
-        float water = 1.0 - smoothstep(width - 0.22, width, distance_to_current);
-        float edge = smoothstep(0.0, 0.16, water);
-        vec2 river = vec2((uv.x - current) * 13.0, uv.y * 24.0 - time * 4.6);
-        vec2 warp = vec2(
-          fbm(river * 0.16 + vec2(time * 0.15, 3.0)),
-          fbm(river * 0.16 + vec2(-4.0, -time * 0.11))
-        );
-        vec2 flowing = river + (warp - 0.5) * vec2(3.2, 2.4);
-        float wave_a = sin(dot(flowing, vec2(1.08, 0.72)) + sin(flowing.y * 0.62 + time) * 0.58 + fbm(flowing * 0.16) * 2.1);
-        float wave_b = sin(dot(flowing, vec2(-0.88, 1.0)) - cos(flowing.x * 0.8 - time * 0.7) * 0.7 + fbm(flowing * 0.11) * 2.3);
-        float caustic_field = 1.0 - abs(wave_a * wave_b);
-        float breakup = fbm(flowing * 0.32 + vec2(-time * 0.08, time * 0.12));
-        float broken_light = smoothstep(0.935, 0.995, caustic_field + (breakup - 0.5) * 0.12) * edge;
-        float soft_light = smoothstep(0.82, 0.98, caustic_field) * smoothstep(0.28, 0.68, breakup) * edge;
-        float glint_field = 1.0 - abs(sin(flowing.x * 2.1 + fbm(flowing * 0.22) * 2.0) * sin(flowing.y * 1.8 - time));
-        float glints = pow(max(glint_field - 0.82, 0.0) * 5.5, 8.0) * edge;
-        float edge_foam = (1.0 - smoothstep(0.0, 0.18, water)) * edge;
-        float depth = smoothstep(0.05, 0.42, water) * (1.0 - smoothstep(0.45, 0.9, water));
-        float grain = fbm(flowing * 0.28 + vec2(2.0, -time * 0.3));
-        vec3 shallow = vec3(0.095, 0.44, 0.46);
-        vec3 deep = vec3(0.014, 0.20, 0.25);
-        vec3 color = mix(shallow, deep, smoothstep(0.05, 0.95, uv.y) * 0.4 + depth * 0.3);
-        color += vec3(0.025, 0.09, 0.095) * grain * edge;
-        color += vec3(0.38, 0.72, 0.68) * soft_light * 0.07;
-        color += vec3(0.71, 0.91, 0.77) * broken_light * 0.42;
-        color += vec3(0.89, 0.98, 0.84) * glints * 0.18;
-        color += vec3(0.48, 0.77, 0.67) * edge_foam * 0.2;
-        color += vec3(0.03, 0.12, 0.14) * depth;
-        out_color = vec4(color, edge * 0.96);
-      }
-    `;
-
-    const compile = (type: number, source: string) => {
-      const shader = gl.createShader(type);
-      if (!shader) return null;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null;
-    };
-    const vertex = compile(gl.VERTEX_SHADER, vertexSource);
-    const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
-    if (!vertex || !fragment) return;
-    const program = gl.createProgram();
-    if (!program) return;
-    gl.attachShader(program, vertex);
-    gl.attachShader(program, fragment);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return;
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-    const position = gl.getAttribLocation(program, "a_position");
-    const resolution = gl.getUniformLocation(program, "u_resolution");
-    const time = gl.getUniformLocation(program, "u_time");
-    const resize = () => {
-      const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-      canvas.width = Math.floor(canvas.clientWidth * ratio);
-      canvas.height = Math.floor(canvas.clientHeight * ratio);
-      gl.viewport(0, 0, canvas.width, canvas.height);
-    };
-    const resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(canvas);
-    resize();
-    gl.useProgram(program);
-    gl.enableVertexAttribArray(position);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-    gl.clearColor(0, 0, 0, 0);
-    const startedAt = performance.now();
-    let frame = 0;
-    const draw = (now: number) => {
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.uniform2f(resolution, canvas.width, canvas.height);
-      gl.uniform1f(time, (now - startedAt) / 1000);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      frame = requestAnimationFrame(draw);
-    };
-    frame = requestAnimationFrame(draw);
-    return () => {
-      cancelAnimationFrame(frame);
-      resizeObserver.disconnect();
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-      gl.deleteShader(vertex);
-      gl.deleteShader(fragment);
-    };
+    if (!canvas) return;
+    return mountFluidSurface(canvas);
   }, []);
 
   return <canvas ref={canvasRef} className="flow-backdrop" aria-hidden="true" />;

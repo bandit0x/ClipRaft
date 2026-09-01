@@ -13,10 +13,10 @@ ClipRaft 计划从 EcoPaste 的 Apache-2.0 固定提交 `5139d30b0f4c1309356a9b3
 
 Ditto（GPL-3.0）、CopyQ（GPL-3.0）和 PasteBar（自定义 CC BY-NC/商业例外条款）目前只作为行为与架构研究资料，不复制代码。
 
-## 液态材质参考（未复制源代码）
+## 液态材质代码与参考
 
-- [PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation)：MIT；仅参考 GPU 流场与扰动方法。
+- [PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation)：MIT；`src/flow/WebGLFluidBackdrop.ts` 选择性移植并改写其 GPU 流体核心 pass，保留此处 MIT 版权声明。
 - [runvendo/fluidkit](https://github.com/runvendo/fluidkit)：仅参考 surface/content 分层与 FLIP 补位方法。
 - [DevSam7t3/liquid-glass](https://github.com/DevSam7t3/liquid-glass)：MIT；仅参考 displacement、边缘高光与降级策略。
 
-ClipRaft 的 `FlowBackdrop` 为本地重写的轻量 WebGL2 焦散实现；运行时不捆绑上述项目，不上传视觉稿或用户剪贴板内容。
+ClipRaft 未捆绑上述项目的运行时或网站资源；液态核心为本地选择性移植，运行时不上传视觉稿或用户剪贴板内容。
