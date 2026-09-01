@@ -1,0 +1,11 @@
+Use case: ui-mockup
+Asset type: high-fidelity 16:9 Windows 11 desktop clipboard edge-bar comp
+Primary request: Design Copy Plate as a very narrow meandering summer creek attached to the far-right edge of a full ordinary Windows 11 desktop. The creek occupies only 18–22% of the screen width, approximately 190–210px in a typical desktop layout. Clipboard entries are small wooden rafts floating on the creek. This is Composition C, “Meandering Current”.
+Scene/backdrop: full 16:9 ordinary Windows 11 desktop with restrained standard blue wallpaper and taskbar; only the narrow right-edge strip is clear turquoise creek water. No lake, mountain, forest, or water outside the edge strip. The creek makes one gentle S-curve within its narrow footprint.
+Subject: practical usable clipboard UI. Tiny search/title stone “剪贴流” at top. Exactly three small wooden rafts in newest-first order: text “视觉稿先行”, image with one small abstract thumbnail, file “参考.zip”. Each raft has a subtle modality marker and front-facing readable label. Bottom miniature control dock has search, pin, settings icons, occupies about half the creek width, and is detached from the last raft by open flowing water.
+Style/medium: premium realistic biomorphic Windows utility UI, not concept art and not a fantasy game.
+Composition/framing: full desktop landscape, narrow creek on far right. Rafts alternate only slightly along the S-curve while retaining obvious vertical chronological order. Water remains visible around all sides of every raft.
+Materials/textures: clear summer water with restrained sunlight caustics, polished stones, minimal bank greenery, warm thin wood-plank rafts with visible thickness and refined rope joints. Irregularity comes from staggered plank ends, not rectangular cards.
+Motion implied: gentle downstream drift, soft micro-tilt, one faint wake per raft, no bounce.
+Constraints: 16:9 desktop frame; creek strictly 18–22% width; bottom dock half creek width; practical semantic controls; legible Simplified Chinese; implementable in Tauri/React with raster material layers.
+Avoid: portrait crop, wide river, full-screen scenery, dark sidebar, generic cards, glassmorphism, cyberpunk, game inventory, oversized controls, rafts touching the dock, poster, hardware frame, watermark.

@@ -1,0 +1,7 @@
+Use case: precise-object-edit
+Asset type: corrected Windows clipboard bar comp
+Primary request: Preserve the pocket-pools summer creek, three wooden clipboard rafts, search stone, and tiny footbridge control dock from the provided image, but correct the scale. Show a full ordinary Windows 11 desktop canvas and constrain the creek to a narrow far-right ribbon occupying only 18–22% of screen width, approximately 190–210px in a typical desktop layout. Scale all rafts and controls down proportionally while retaining the pool–run–pool rhythm.
+Keep: clear aqua pocket pools, warm wood, gentle raft staggering, chronological order, readable labels, and detached half-width bottom dock.
+Change only: expand the normal desktop area, narrow the creek by roughly 50%, remove any accidental black empty area, and scale content to fit.
+Constraints: practical narrow edge utility, no opaque backing panel, water visible around every raft.
+Avoid: wide river, full-screen landscape, straightening the pool rhythm, fantasy inventory, oversized controls, watermark.

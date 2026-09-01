@@ -1,0 +1,7 @@
+Use case: precise-object-edit
+Asset type: corrected Windows clipboard bar comp
+Primary request: Preserve the straight sunlit summer creek, three wooden clipboard rafts, search stone, and compact bottom dock from the provided image, but correct the scale. Show a full ordinary Windows 11 desktop canvas and constrain the creek bar to the far-right 18–22% of the screen width, approximately 190–210px in a typical desktop layout. Scale the rafts and controls down proportionally so open water remains around them.
+Keep: straight vertical creek composition, realistic clear water, warm wooden rafts, chronological order, readable labels, and detached bottom dock.
+Change only: widen the visible ordinary desktop area, narrow the creek bar by about 50%, and reduce the raft/control scale to fit.
+Constraints: creek is a narrow edge utility, not half the screen; no opaque panel; bottom dock remains about half the creek width.
+Avoid: wide river, full-screen scenery, changing to a curved creek, fantasy game, oversized controls, watermark.

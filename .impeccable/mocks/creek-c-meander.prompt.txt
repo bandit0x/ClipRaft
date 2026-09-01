@@ -1,0 +1,5 @@
+Edit provenance: generated from the user-selected visual reference in two local ImageGen revisions on 2026-09-02.
+
+Revision 1: preserve the realistic sunlit summer creek, title/search stones, detached control dock, lighting, Chinese content, and wooden construction; reduce each clipboard raft to approximately one third of its former visible area, about 58% of the former width and height, while retaining readable modality-specific content and generous water spacing.
+
+Revision 2: preserve the reduced raft sizes and positions; remove roughly 65–75% of grass, flowers, ferns, leaves, small stones, and continuous pebble borders from both banks. Replace clutter with quiet bank edges and uninterrupted water, retaining only a few deliberate smooth stones and restrained plant accents. Keep the result premium and photorealistic rather than game-like.

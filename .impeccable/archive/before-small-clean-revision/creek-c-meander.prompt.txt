@@ -1,0 +1,3 @@
+Source provenance: user-provided visual reference, explicitly selected on 2026-09-02.
+
+This is not an image-generation prompt. The approved reference establishes a realistic, sunlit summer creek docked to the Windows desktop edge; clipboard items are thick, hand-built wooden rafts carrying modality-specific content surfaces. The creek remains a narrow utility panel rather than replacing or depending on the desktop wallpaper. The bottom controls sit on a small detached wooden dock. The user additionally approved upstream drifting as the continuity motion when a card is deleted, replaced, or deduplicated.

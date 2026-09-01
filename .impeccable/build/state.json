@@ -1,0 +1,105 @@
+{
+  "tool": "build-phase",
+  "version": 2,
+  "startedAt": "2026-09-01T16:15:49.094Z",
+  "comp": ".impeccable\\mocks\\creek-c-meander.png",
+  "direction": "a21f321a",
+  "breakpoint": "941x1672",
+  "artifact": null,
+  "phase": "plates",
+  "phases": {
+    "comps": {
+      "status": "closed",
+      "openedAt": "2026-09-01T16:15:49.093Z",
+      "closedAt": "2026-09-01T16:17:13.673Z",
+      "attempts": 1,
+      "notes": [
+        {
+          "at": "2026-09-01T16:15:49.176Z",
+          "text": "Reopened visual approval after user requested one-third raft area and substantially simpler creek banks with sparse stones and plants."
+        },
+        {
+          "at": "2026-09-01T16:17:13.593Z",
+          "text": "User approved the small-raft, simplified-bank revision."
+        }
+      ],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "3 comps, 1 approved",
+        "approved": ".impeccable\\mocks\\creek-c-meander.png",
+        "at": "2026-09-01T16:17:13.672Z"
+      },
+      "forced": null
+    },
+    "spec": {
+      "status": "closed",
+      "openedAt": "2026-09-01T16:17:13.740Z",
+      "closedAt": "2026-09-01T17:21:23.293Z",
+      "attempts": 4,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "15 regions, 8 plates, 4 text regions measured",
+        "at": "2026-09-01T17:21:23.292Z"
+      },
+      "forced": null
+    },
+    "plates": {
+      "status": "open",
+      "openedAt": "2026-09-01T17:21:23.293Z",
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "hero": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "sections": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "motion": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "responsive": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "review": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    }
+  },
+  "finish": null
+}

@@ -1,0 +1,769 @@
+{
+  "tool": "comp-spec",
+  "version": 1,
+  "createdAt": "2026-09-01T17:20:09.088Z",
+  "comp": ".impeccable\\mocks\\creek-c-meander.png",
+  "warnings": [],
+  "uncoveredInkCells": [],
+  "compSize": {
+    "width": 941,
+    "height": 1672
+  },
+  "aspect": 0.5628,
+  "orientation": "portrait",
+  "palette": [
+    {
+      "hex": "#7cbaed",
+      "coverage": 0.2741
+    },
+    {
+      "hex": "#418e95",
+      "coverage": 0.2501
+    },
+    {
+      "hex": "#4384bd",
+      "coverage": 0.2053
+    },
+    {
+      "hex": "#56a1e8",
+      "coverage": 0.1513
+    },
+    {
+      "hex": "#254244",
+      "coverage": 0.1191
+    }
+  ],
+  "bands": [
+    {
+      "y": 0.9692,
+      "strength": 0.4974
+    }
+  ],
+  "regions": [
+    {
+      "id": "open-sky",
+      "kind": "plate",
+      "note": "desktop sky, lake, and distant mountain field",
+      "grid": "A0:F9",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 0.6,
+        "h": 1
+      },
+      "px": {
+        "x": 0,
+        "y": 0,
+        "w": 565,
+        "h": 1672
+      },
+      "aspect": 0.3379,
+      "palette": [
+        {
+          "hex": "#7cbaed",
+          "coverage": 0.3668
+        },
+        {
+          "hex": "#4384bd",
+          "coverage": 0.2765
+        },
+        {
+          "hex": "#56a1e8",
+          "coverage": 0.2042
+        },
+        {
+          "hex": "#519fc0",
+          "coverage": 0.0895
+        },
+        {
+          "hex": "#acd0f0",
+          "coverage": 0.0631
+        }
+      ],
+      "detail": {
+        "energy": 13.7503
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\open-sky.png",
+      "text": null
+    },
+    {
+      "id": "creek-water",
+      "kind": "plate",
+      "note": "sunlit shallow-water caustics",
+      "grid": "G2:J8",
+      "box": {
+        "x": 0.6,
+        "y": 0.2,
+        "w": 0.4,
+        "h": 0.7
+      },
+      "px": {
+        "x": 565,
+        "y": 334,
+        "w": 376,
+        "h": 1170
+      },
+      "aspect": 0.3214,
+      "palette": [
+        {
+          "hex": "#429197",
+          "coverage": 0.5643
+        },
+        {
+          "hex": "#80b7b8",
+          "coverage": 0.1833
+        },
+        {
+          "hex": "#276a77",
+          "coverage": 0.1486
+        },
+        {
+          "hex": "#1d4a50",
+          "coverage": 0.0541
+        },
+        {
+          "hex": "#eecba3",
+          "coverage": 0.0497
+        }
+      ],
+      "detail": {
+        "energy": 38.1869
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\creek-water.png",
+      "text": null
+    },
+    {
+      "id": "bank-rocks",
+      "kind": "plate",
+      "note": "rounded river stones and sparse foliage",
+      "grid": "F0:J1",
+      "box": {
+        "x": 0.5,
+        "y": 0,
+        "w": 0.5,
+        "h": 0.2
+      },
+      "px": {
+        "x": 471,
+        "y": 0,
+        "w": 471,
+        "h": 334
+      },
+      "aspect": 1.4102,
+      "palette": [
+        {
+          "hex": "#1d3a3e",
+          "coverage": 0.3077
+        },
+        {
+          "hex": "#276876",
+          "coverage": 0.2263
+        },
+        {
+          "hex": "#4897a1",
+          "coverage": 0.2164
+        },
+        {
+          "hex": "#d0c1b1",
+          "coverage": 0.1262
+        },
+        {
+          "hex": "#81b7bb",
+          "coverage": 0.1234
+        }
+      ],
+      "detail": {
+        "energy": 31.5377
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\bank-rocks.png",
+      "text": null
+    },
+    {
+      "id": "raft-text",
+      "kind": "plate",
+      "note": "small wooden text raft with parchment",
+      "grid": "H2:I3",
+      "box": {
+        "x": 0.7,
+        "y": 0.2,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 334,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#2b808f",
+          "coverage": 0.4294
+        },
+        {
+          "hex": "#5caaad",
+          "coverage": 0.1675
+        },
+        {
+          "hex": "#edcba4",
+          "coverage": 0.1654
+        },
+        {
+          "hex": "#1a5a64",
+          "coverage": 0.1377
+        },
+        {
+          "hex": "#936743",
+          "coverage": 0.1
+        }
+      ],
+      "detail": {
+        "energy": 29.1884
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\raft-text.png",
+      "text": null
+    },
+    {
+      "id": "raft-image",
+      "kind": "plate",
+      "note": "small wooden image raft with framed photo",
+      "grid": "H5:I6",
+      "box": {
+        "x": 0.7,
+        "y": 0.5,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 836,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#2c7e8d",
+          "coverage": 0.4258
+        },
+        {
+          "hex": "#499a9d",
+          "coverage": 0.2759
+        },
+        {
+          "hex": "#1f5b6c",
+          "coverage": 0.1118
+        },
+        {
+          "hex": "#b27c4e",
+          "coverage": 0.0982
+        },
+        {
+          "hex": "#86babb",
+          "coverage": 0.0883
+        }
+      ],
+      "detail": {
+        "energy": 26.2707
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\raft-image.png",
+      "text": null
+    },
+    {
+      "id": "raft-file",
+      "kind": "plate",
+      "note": "small wooden file raft with parchment",
+      "grid": "H7:I8",
+      "box": {
+        "x": 0.7,
+        "y": 0.7,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 1170,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#348288",
+          "coverage": 0.5115
+        },
+        {
+          "hex": "#68aaa9",
+          "coverage": 0.1807
+        },
+        {
+          "hex": "#eac499",
+          "coverage": 0.1428
+        },
+        {
+          "hex": "#1b575e",
+          "coverage": 0.0939
+        },
+        {
+          "hex": "#82593b",
+          "coverage": 0.0711
+        }
+      ],
+      "detail": {
+        "energy": 26.2028
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\raft-file.png",
+      "text": null
+    },
+    {
+      "id": "title-stone",
+      "kind": "plate",
+      "note": "large title stone and search stone",
+      "grid": "H0:I1",
+      "box": {
+        "x": 0.7,
+        "y": 0,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 0,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#256d7c",
+          "coverage": 0.3409
+        },
+        {
+          "hex": "#1c3c3f",
+          "coverage": 0.2321
+        },
+        {
+          "hex": "#d7c7b6",
+          "coverage": 0.2015
+        },
+        {
+          "hex": "#696456",
+          "coverage": 0.1148
+        },
+        {
+          "hex": "#489aa0",
+          "coverage": 0.1107
+        }
+      ],
+      "detail": {
+        "energy": 19.9386
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\title-stone.png",
+      "text": null
+    },
+    {
+      "id": "brand-copy",
+      "kind": "text",
+      "note": "剪贴流 title lettering",
+      "grid": "H0:I0",
+      "box": {
+        "x": 0.7,
+        "y": 0,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "px": {
+        "x": 659,
+        "y": 0,
+        "w": 188,
+        "h": 167
+      },
+      "aspect": 1.1257,
+      "palette": [
+        {
+          "hex": "#d7c7b6",
+          "coverage": 0.3534
+        },
+        {
+          "hex": "#1e393c",
+          "coverage": 0.2563
+        },
+        {
+          "hex": "#337682",
+          "coverage": 0.1935
+        },
+        {
+          "hex": "#9c9289",
+          "coverage": 0.1032
+        },
+        {
+          "hex": "#716c5d",
+          "coverage": 0.0935
+        }
+      ],
+      "detail": {
+        "energy": 21.481
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": null,
+        "measuredAt": "2026-09-01T17:21:16.544Z",
+        "note": "no separable lettering in the crop; size by the region box"
+      }
+    },
+    {
+      "id": "search-control",
+      "kind": "control",
+      "note": "search stone control",
+      "grid": "H1:I1",
+      "box": {
+        "x": 0.7,
+        "y": 0.1,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "px": {
+        "x": 659,
+        "y": 167,
+        "w": 188,
+        "h": 167
+      },
+      "aspect": 1.1257,
+      "palette": [
+        {
+          "hex": "#227081",
+          "coverage": 0.41
+        },
+        {
+          "hex": "#1c4d5b",
+          "coverage": 0.1898
+        },
+        {
+          "hex": "#132b28",
+          "coverage": 0.136
+        },
+        {
+          "hex": "#636052",
+          "coverage": 0.1326
+        },
+        {
+          "hex": "#4ea1a9",
+          "coverage": 0.1316
+        }
+      ],
+      "detail": {
+        "energy": 18.5948
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "text-raft-copy",
+      "kind": "text",
+      "note": "text raft title and metadata",
+      "grid": "H2:I3",
+      "box": {
+        "x": 0.7,
+        "y": 0.2,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 334,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#2b808f",
+          "coverage": 0.4294
+        },
+        {
+          "hex": "#5caaad",
+          "coverage": 0.1675
+        },
+        {
+          "hex": "#edcba4",
+          "coverage": 0.1654
+        },
+        {
+          "hex": "#1a5a64",
+          "coverage": 0.1377
+        },
+        {
+          "hex": "#936743",
+          "coverage": 0.1
+        }
+      ],
+      "detail": {
+        "energy": 29.1884
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": null,
+        "measuredAt": "2026-09-01T17:20:46.721Z",
+        "note": "no separable lettering in the crop; size by the region box"
+      }
+    },
+    {
+      "id": "image-raft-copy",
+      "kind": "text",
+      "note": "image raft title and metadata",
+      "grid": "H5:I6",
+      "box": {
+        "x": 0.7,
+        "y": 0.5,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 836,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#2c7e8d",
+          "coverage": 0.4258
+        },
+        {
+          "hex": "#499a9d",
+          "coverage": 0.2759
+        },
+        {
+          "hex": "#1f5b6c",
+          "coverage": 0.1118
+        },
+        {
+          "hex": "#b27c4e",
+          "coverage": 0.0982
+        },
+        {
+          "hex": "#86babb",
+          "coverage": 0.0883
+        }
+      ],
+      "detail": {
+        "energy": 26.2707
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": null,
+        "measuredAt": "2026-09-01T17:20:18.400Z",
+        "note": "no separable lettering in the crop; size by the region box"
+      }
+    },
+    {
+      "id": "file-raft-copy",
+      "kind": "text",
+      "note": "file raft title and metadata",
+      "grid": "H7:I8",
+      "box": {
+        "x": 0.7,
+        "y": 0.7,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 659,
+        "y": 1170,
+        "w": 188,
+        "h": 334
+      },
+      "aspect": 0.5629,
+      "palette": [
+        {
+          "hex": "#348288",
+          "coverage": 0.5115
+        },
+        {
+          "hex": "#68aaa9",
+          "coverage": 0.1807
+        },
+        {
+          "hex": "#eac499",
+          "coverage": 0.1428
+        },
+        {
+          "hex": "#1b575e",
+          "coverage": 0.0939
+        },
+        {
+          "hex": "#82593b",
+          "coverage": 0.0711
+        }
+      ],
+      "detail": {
+        "energy": 26.2028
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": null,
+        "measuredAt": "2026-09-01T17:21:01.675Z",
+        "note": "no separable lettering in the crop; size by the region box"
+      }
+    },
+    {
+      "id": "bottom-dock",
+      "kind": "plate",
+      "note": "detached wooden control dock",
+      "grid": "H9:I9",
+      "box": {
+        "x": 0.7,
+        "y": 0.9,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "px": {
+        "x": 659,
+        "y": 1505,
+        "w": 188,
+        "h": 167
+      },
+      "aspect": 1.1257,
+      "palette": [
+        {
+          "hex": "#154442",
+          "coverage": 0.2848
+        },
+        {
+          "hex": "#b77e4f",
+          "coverage": 0.247
+        },
+        {
+          "hex": "#dda773",
+          "coverage": 0.2247
+        },
+        {
+          "hex": "#1c3e4e",
+          "coverage": 0.1634
+        },
+        {
+          "hex": "#3d321b",
+          "coverage": 0.0802
+        }
+      ],
+      "detail": {
+        "energy": 21.1084
+      },
+      "medium": "raster",
+      "plate": "assets\\plates\\bottom-dock.png",
+      "text": null
+    },
+    {
+      "id": "dock-controls",
+      "kind": "control",
+      "note": "filter, pin, and settings controls",
+      "grid": "H9:I9",
+      "box": {
+        "x": 0.7,
+        "y": 0.9,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "px": {
+        "x": 659,
+        "y": 1505,
+        "w": 188,
+        "h": 167
+      },
+      "aspect": 1.1257,
+      "palette": [
+        {
+          "hex": "#154442",
+          "coverage": 0.2848
+        },
+        {
+          "hex": "#b77e4f",
+          "coverage": 0.247
+        },
+        {
+          "hex": "#dda773",
+          "coverage": 0.2247
+        },
+        {
+          "hex": "#1c3e4e",
+          "coverage": 0.1634
+        },
+        {
+          "hex": "#3d321b",
+          "coverage": 0.0802
+        }
+      ],
+      "detail": {
+        "energy": 21.1084
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "desktop-chrome",
+      "kind": "chrome",
+      "note": "Windows taskbar shown only in the reference comp",
+      "grid": "A9:J9",
+      "box": {
+        "x": 0,
+        "y": 0.9,
+        "w": 1,
+        "h": 0.1
+      },
+      "px": {
+        "x": 0,
+        "y": 1505,
+        "w": 941,
+        "h": 167
+      },
+      "aspect": 5.6347,
+      "palette": [
+        {
+          "hex": "#41a4ca",
+          "coverage": 0.3378
+        },
+        {
+          "hex": "#2c4a4a",
+          "coverage": 0.1931
+        },
+        {
+          "hex": "#73b0c2",
+          "coverage": 0.1713
+        },
+        {
+          "hex": "#46727b",
+          "coverage": 0.1631
+        },
+        {
+          "hex": "#265870",
+          "coverage": 0.1347
+        }
+      ],
+      "detail": {
+        "energy": 27.9324
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    }
+  ]
+}

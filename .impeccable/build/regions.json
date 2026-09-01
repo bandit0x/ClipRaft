@@ -1,0 +1,19 @@
+{
+  "regions": [
+    { "id": "open-sky", "kind": "plate", "grid": "A0:F9", "note": "desktop sky, lake, and distant mountain field" },
+    { "id": "creek-water", "kind": "plate", "grid": "G2:J8", "note": "sunlit shallow-water caustics" },
+    { "id": "bank-rocks", "kind": "plate", "grid": "F0:J1", "note": "rounded river stones and sparse foliage" },
+    { "id": "raft-text", "kind": "plate", "grid": "H2:I3", "note": "small wooden text raft with parchment" },
+    { "id": "raft-image", "kind": "plate", "grid": "H5:I6", "note": "small wooden image raft with framed photo" },
+    { "id": "raft-file", "kind": "plate", "grid": "H7:I8", "note": "small wooden file raft with parchment" },
+    { "id": "title-stone", "kind": "plate", "grid": "H0:I1", "note": "large title stone and search stone" },
+    { "id": "brand-copy", "kind": "text", "grid": "H0:I0", "note": "剪贴流 title lettering" },
+    { "id": "search-control", "kind": "control", "grid": "H1:I1", "note": "search stone control" },
+    { "id": "text-raft-copy", "kind": "text", "grid": "H2:I3", "note": "text raft title and metadata" },
+    { "id": "image-raft-copy", "kind": "text", "grid": "H5:I6", "note": "image raft title and metadata" },
+    { "id": "file-raft-copy", "kind": "text", "grid": "H7:I8", "note": "file raft title and metadata" },
+    { "id": "bottom-dock", "kind": "plate", "grid": "H9:I9", "note": "detached wooden control dock" },
+    { "id": "dock-controls", "kind": "control", "grid": "H9:I9", "note": "filter, pin, and settings controls" },
+    { "id": "desktop-chrome", "kind": "chrome", "grid": "A9:J9", "note": "Windows taskbar shown only in the reference comp" }
+  ]
+}
