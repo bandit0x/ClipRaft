@@ -18,12 +18,6 @@ type ClipCard = {
   pinned: boolean;
 };
 
-const sampleCards: ClipCard[] = [
-  { id: "visual-draft", kind: "text", preview: "视觉稿先行", detail: "文本 · 12 字符", copiedAt: "10:21", useCount: 2, pinned: true },
-  { id: "lake-image", kind: "image", preview: "PNG · 1920×1080", detail: "图片 · 2.4 MB", copiedAt: "10:20", useCount: 1, pinned: false },
-  { id: "reference-zip", kind: "file", preview: "参考.zip", detail: "ZIP · 24.8 MB", copiedAt: "10:18", useCount: 1, pinned: false },
-];
-
 const iconPaths: Record<string, string> = {
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm6-2 4 4",
   pin: "m12 3 3 3-2 2 4 4-3 3 1 5-3-3-3 3 1-5-3-3 4-4-2-2 3-3Z",
@@ -100,14 +94,16 @@ function useRaftMotion(cards: ClipCard[], refs: MutableRefObject<Map<string, HTM
   }, [cards, refs]);
 }
 
-function RaftCard({ card, index, removing, selected, onSelect, onDelete, onRestore, onDragStart, onDragEnd, setRef }: {
+function RaftCard({ card, imageSrc, index, removing, selected, onSelect, onDelete, onRestore, onTogglePin, onDragStart, onDragEnd, setRef }: {
   card: ClipCard;
+  imageSrc?: string;
   index: number;
   removing: boolean;
   selected: boolean;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onRestore: (id: string) => void;
+  onTogglePin: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   setRef: (element: HTMLDivElement | null) => void;
@@ -116,7 +112,7 @@ function RaftCard({ card, index, removing, selected, onSelect, onDelete, onResto
     <div className="raft-motion" ref={setRef}>
       <div className={`raft-wake wake-${index % 3}`} aria-hidden="true"><span /><span /><span /></div>
       <article
-        className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${selected ? "is-selected" : ""} ${removing ? "is-removing" : ""}`}
+        className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${selected ? "is-selected" : ""} ${card.pinned ? "is-pinned" : ""} ${removing ? "is-removing" : ""}`}
         tabIndex={0}
         aria-selected={selected}
         draggable={!removing}
@@ -129,8 +125,8 @@ function RaftCard({ card, index, removing, selected, onSelect, onDelete, onResto
         <div className="raft-rope rope-bottom" />
         <div className="raft-rails" aria-hidden="true" />
         <div className={`modality-badge badge-${card.kind}`}><Icon name={card.kind} size={12} /></div>
-        <button className="raft-content" onDoubleClick={() => onRestore(card.id)} aria-label={`恢复${card.preview}`}>
-          {card.kind === "image" && <div className="image-preview"><span className="sun" /><span className="mountain mountain-back" /><span className="mountain mountain-front" /><span className="lake-line" /></div>}
+        <button className="raft-content" onClick={() => onSelect(card.id)} onDoubleClick={() => onRestore(card.id)} aria-label={`恢复${card.preview}`}>
+          {card.kind === "image" && <div className="image-preview">{imageSrc ? <img src={imageSrc} alt="" draggable={false} /> : <><span className="sun" /><span className="mountain mountain-back" /><span className="mountain mountain-front" /><span className="lake-line" /></>}</div>}
           {card.kind === "file" && <div className="file-preview"><span className="file-tab" /><span className="zip-mark">ZIP</span></div>}
           <div className="paper">
             <strong>{card.preview}</strong>
@@ -140,6 +136,7 @@ function RaftCard({ card, index, removing, selected, onSelect, onDelete, onResto
         </button>
         <div className="raft-actions">
           <button onClick={() => onRestore(card.id)} aria-label="恢复内容" title="恢复"><Icon name="restore" size={11} /></button>
+          <button className={card.pinned ? "is-active" : ""} onClick={() => onTogglePin(card.id)} aria-label={card.pinned ? "取消固定卡片" : "固定卡片"} title={card.pinned ? "取消固定" : "固定"}><Icon name="pin" size={11} /></button>
           <button onClick={() => onDelete(card.id)} aria-label="删除卡片" title="移除"><Icon name="close" size={11} /></button>
         </div>
       </article>
@@ -148,20 +145,47 @@ function RaftCard({ card, index, removing, selected, onSelect, onDelete, onResto
 }
 
 function App() {
-  const [cards, setCards] = useState<ClipCard[]>(sampleCards);
+  const [cards, setCards] = useState<ClipCard[]>([]);
   const [query, setQuery] = useState("");
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("复制内容会在这里顺流靠岸");
   const [autoPaste, setAutoPaste] = useState(true);
   const [historyPersistence, setHistoryPersistence] = useState(true);
+  const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingOverTrash, setDraggingOverTrash] = useState(false);
   const [undoableId, setUndoableId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const undoTimerRef = useRef<number | null>(null);
+  const autoCollapseTimerRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const refs = useRef(new Map<string, HTMLDivElement>());
   const worldRef = useRef<HTMLDivElement>(null);
   const [raftAnchors, setRaftAnchors] = useState<FluidRaft[]>([]);
+
+  const clearAutoCollapse = useCallback(() => {
+    if (autoCollapseTimerRef.current) window.clearTimeout(autoCollapseTimerRef.current);
+    autoCollapseTimerRef.current = null;
+  }, []);
+
+  const openPanel = useCallback((peek = false) => {
+    clearAutoCollapse();
+    setExpanded(true);
+    void invoke("set_panel_expanded", { expanded: true });
+    if (peek) {
+      autoCollapseTimerRef.current = window.setTimeout(() => {
+        setExpanded(false);
+        void invoke("set_panel_expanded", { expanded: false });
+      }, 2600);
+    }
+  }, [clearAutoCollapse]);
+
+  const holdPanelOpen = useCallback(() => {
+    clearAutoCollapse();
+    setExpanded(true);
+    void invoke("set_panel_expanded", { expanded: true });
+  }, [clearAutoCollapse]);
 
   const refresh = useCallback(async () => {
     try {
@@ -176,19 +200,45 @@ function App() {
     void invoke<boolean>("get_history_persistence")
       .then(setHistoryPersistence)
       .catch(() => undefined);
+    void invoke<boolean>("get_auto_paste")
+      .then(setAutoPaste)
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const imageCards = cards.filter((card) => card.kind === "image");
+    void Promise.all(imageCards.map(async (card) => {
+      try {
+        const dataUrl = await invoke<string | null>("image_preview_data_url", { id: card.id });
+        return dataUrl ? [card.id, dataUrl] as const : null;
+      } catch {
+        return null;
+      }
+    })).then((entries) => {
+      if (!active) return;
+      setImagePreviews(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry))));
+    });
+    return () => { active = false; };
+  }, [cards]);
 
   useEffect(() => {
     return () => {
       if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+      clearAutoCollapse();
     };
-  }, []);
+  }, [clearAutoCollapse]);
 
   useEffect(() => {
     refresh();
     let unlisten: (() => void) | undefined;
     let unlistenDrop: (() => void) | undefined;
+    let unlistenPanel: (() => void) | undefined;
+    void listen("panel://opened", () => holdPanelOpen())
+      .then((cleanup) => { unlistenPanel = cleanup; })
+      .catch(() => undefined);
     void listen<ClipCard>("clipboard://updated", (event) => {
+      openPanel(true);
       setCards((current) => [event.payload, ...current.filter((card) => card.id !== event.payload.id)].slice(0, 200));
       setNotice("新木筏已顺流靠岸");
     }).then((cleanup) => { unlisten = cleanup; }).catch(() => undefined);
@@ -208,8 +258,8 @@ function App() {
         })
         .catch(() => setNotice("文件没有成功靠岸"));
     }).then((cleanup) => { unlistenDrop = cleanup; }).catch(() => undefined);
-    return () => { unlisten?.(); unlistenDrop?.(); };
-  }, [refresh]);
+    return () => { unlisten?.(); unlistenDrop?.(); unlistenPanel?.(); };
+  }, [holdPanelOpen, openPanel, refresh]);
 
   useRaftMotion(cards, refs);
 
@@ -235,6 +285,8 @@ function App() {
   }, [cards, query, visibleCards.length]);
 
   const deleteCard = async (id: string) => {
+    const card = cards.find((item) => item.id === id);
+    if (card?.pinned && !window.confirm("这张木筏已固定，确认要将它移出历史吗？")) return;
     setRemovingId(id);
     setDraggingId(null);
     setDraggingOverTrash(false);
@@ -281,6 +333,31 @@ function App() {
     }
   };
 
+  const togglePinned = async (id: string) => {
+    const card = cards.find((item) => item.id === id);
+    if (!card) return;
+    const pinned = !card.pinned;
+    try {
+      const updated = await invoke<ClipCard>("set_clip_pinned", { id, pinned });
+      setCards((current) => current.map((item) => item.id === id ? updated : item));
+      setSelectedId(id);
+      setNotice(pinned ? "木筏已固定在水面" : "木筏已恢复顺流排序");
+    } catch {
+      setNotice("固定状态更新失败");
+    }
+  };
+
+  const toggleAutoPaste = async () => {
+    const next = !autoPaste;
+    try {
+      await invoke("set_auto_paste", { enabled: next });
+    } catch {
+      // Browser preview has no native settings store.
+    }
+    setAutoPaste(next);
+    setNotice(next ? "已开启自动粘贴" : "已关闭自动粘贴，仅复制");
+  };
+
   const handleDragStart = (id: string) => {
     setDraggingId(id);
     setDraggingOverTrash(false);
@@ -299,8 +376,9 @@ function App() {
 
   return (
     <main className="app-shell">
-      <div ref={worldRef} className="creek-world" aria-label="ClipRaft 剪贴板面板">
-        <FlowBackdrop rafts={raftAnchors} />
+      <div ref={worldRef} className={`creek-world ${expanded ? "" : "is-collapsed"}`} aria-label="ClipRaft 剪贴板面板" onMouseEnter={holdPanelOpen}>
+        {!expanded && <button className="edge-handle" onClick={() => openPanel()} aria-label="打开 ClipRaft"><span /></button>}
+        {expanded && <FlowBackdrop rafts={raftAnchors} />}
         <div className="water-photo-material" aria-hidden="true" />
         <div className="water-caustic-layer" aria-hidden="true" />
         <div className="water-highlight highlight-one" />
@@ -312,13 +390,13 @@ function App() {
           <div className="title-stone"><span>ClipRaft</span><small>剪贴流</small></div>
           <label className="search-stone">
             <Icon name="search" size={20} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索" aria-label="搜索剪贴卡片" />
+            <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索" aria-label="搜索剪贴卡片" />
           </label>
         </header>
 
         <section className="history-stream" aria-live="polite">
           {visibleCards.length ? visibleCards.map((card, index) => (
-            <RaftCard key={card.id} card={card} index={index} removing={removingId === card.id} selected={selectedId === card.id} onSelect={setSelectedId} onDelete={deleteCard} onRestore={restoreCard} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
+            <RaftCard key={card.id} card={card} imageSrc={imagePreviews[card.id]} index={index} removing={removingId === card.id} selected={selectedId === card.id} onSelect={setSelectedId} onDelete={deleteCard} onRestore={restoreCard} onTogglePin={(id) => void togglePinned(id)} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
           )) : <div className="empty-water">水面很安静<br /><span>复制一点内容，让木筏靠岸</span></div>}
         </section>
 
@@ -331,15 +409,15 @@ function App() {
         ><Icon name="trash" size={18} /><span>{draggingOverTrash ? "松开删除" : "拖到这里删除"}</span></button>}
 
         <div className="detached-dock">
-          <button aria-label="筛选卡片" onClick={() => setNotice("筛选功能将在下一条纵切片接入")}><Icon name="search" /></button>
-          <button aria-label="固定卡片" onClick={() => setNotice("选中木筏后可固定")}><Icon name="pin" /></button>
+          <button aria-label="搜索卡片" onClick={() => searchInputRef.current?.focus()}><Icon name="search" /></button>
+          <button aria-label={selectedId ? (cards.find((card) => card.id === selectedId)?.pinned ? "取消固定卡片" : "固定卡片") : "先选择卡片"} disabled={!selectedId} onClick={() => { if (selectedId) void togglePinned(selectedId); }}><Icon name="pin" /></button>
           <button aria-label={historyPersistence ? "关闭跨重启历史保留" : "开启跨重启历史保留"} title={historyPersistence ? "关闭历史保留" : "开启历史保留"} onClick={() => void toggleHistoryPersistence()}><Icon name="settings" /></button>
         </div>
         <div className="status-strip">
           <span className="status-dot" />
           <span>{notice}</span>
           {undoableId && <button className="undo-action" onClick={() => void undoDelete()}>撤销</button>}
-          <button className={`auto-paste ${autoPaste ? "is-on" : ""}`} aria-pressed={autoPaste} onClick={() => { setAutoPaste((value) => !value); setNotice(autoPaste ? "已关闭自动粘贴，仅复制" : "已开启自动粘贴"); }}>{autoPaste ? "自动粘贴" : "仅复制"}</button>
+          <button className={`auto-paste ${autoPaste ? "is-on" : ""}`} aria-pressed={autoPaste} onClick={() => void toggleAutoPaste()}>{autoPaste ? "自动粘贴" : "仅复制"}</button>
         </div>
       </div>
     </main>

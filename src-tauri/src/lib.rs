@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use base64::Engine;
 use blake3::Hasher;
 use clipboard_rs::common::RustImage;
 use clipboard_rs::{
@@ -15,7 +16,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VK_V,
@@ -25,6 +26,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
+const PANEL_OPENED: &str = "panel://opened";
 const MAX_CARDS: i64 = 200;
 const IGNORE_WINDOW: Duration = Duration::from_secs(3);
 
@@ -166,6 +168,20 @@ impl AppState {
         *persistence_enabled = enabled;
         Ok(())
     }
+
+    fn auto_paste(&self) -> Result<bool, String> {
+        self.store
+            .lock()
+            .map_err(|_| "history lock poisoned".to_string())?
+            .bool_setting("auto_paste", true)
+    }
+
+    fn set_auto_paste(&self, enabled: bool) -> Result<(), String> {
+        self.store
+            .lock()
+            .map_err(|_| "history lock poisoned".to_string())?
+            .set_bool_setting("auto_paste", enabled)
+    }
 }
 
 impl Drop for AppState {
@@ -291,9 +307,11 @@ impl SqliteStore {
     #[cfg(test)]
     fn in_memory() -> Self {
         let connection = Connection::open_in_memory().expect("in-memory sqlite");
+        let resource_dir = std::env::temp_dir().join("clipraft-test-resources");
+        fs::create_dir_all(&resource_dir).expect("test resource directory");
         let mut store = Self {
             connection,
-            resource_dir: std::env::temp_dir().join("clipraft-test-resources"),
+            resource_dir,
         };
         store.initialize().expect("initialize sqlite");
         store
@@ -330,7 +348,9 @@ impl SqliteStore {
                    value TEXT NOT NULL
                  );
                  INSERT OR IGNORE INTO settings (key, value)
-                   VALUES ('history_persistence', 'true');",
+                   VALUES ('history_persistence', 'true');
+                 INSERT OR IGNORE INTO settings (key, value)
+                   VALUES ('auto_paste', 'true');",
             )
             .map_err(|error| error.to_string())
     }
@@ -530,6 +550,29 @@ impl SqliteStore {
         })
     }
 
+    fn image_preview_data_url(&self, id: &str) -> Result<Option<String>, String> {
+        let path = self
+            .connection
+            .query_row(
+                "SELECT resource_path
+                 FROM representations
+                 WHERE clip_id = ?1 AND format = 'image/png'",
+                params![id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+            .flatten();
+        let Some(path) = path else {
+            return Ok(None);
+        };
+        let bytes = fs::read(path).map_err(|error| error.to_string())?;
+        Ok(Some(format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        )))
+    }
+
     fn soft_delete(&mut self, id: &str) -> Result<(), String> {
         self.connection
             .execute(
@@ -541,13 +584,32 @@ impl SqliteStore {
     }
 
     fn restore_deleted(&mut self, id: &str) -> Result<(), String> {
-        self.connection
+        let changed = self
+            .connection
             .execute(
                 "UPDATE clips SET deleted_at = NULL WHERE id = ?1",
                 params![id],
             )
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        if changed == 0 {
+            return Err("要恢复的卡片不存在或已被清理".to_string());
+        }
+        Ok(())
+    }
+
+    fn set_pinned(&mut self, id: &str, pinned: bool) -> Result<ClipCard, String> {
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE clips SET pinned = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+                params![pinned, id],
+            )
+            .map_err(|error| error.to_string())?;
+        if changed == 0 {
+            return Err("要固定的卡片不存在".to_string());
+        }
+        self.card_by_id(id)?
+            .ok_or_else(|| "卡片更新后无法读取".to_string())
     }
 
     fn clear(&mut self) -> Result<(), String> {
@@ -833,9 +895,29 @@ impl ClipboardHandler for ClipboardChangeHandler {
 
 fn expand_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        let _ = set_panel_width(&window, 216.0);
+        let _ = dock_window(&window);
         let _ = window.show();
         let _ = window.unminimize();
+        let _ = app.emit(PANEL_OPENED, ());
     }
+}
+
+fn set_panel_width(window: &WebviewWindow, logical_width: f64) -> Result<(), String> {
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let height = window
+        .outer_size()
+        .map_err(|error| error.to_string())?
+        .height;
+    let width = (logical_width * scale_factor).round() as u32;
+    window
+        .set_size(PhysicalSize::new(width.max(1), height))
+        .map_err(|error| error.to_string())
+}
+
+fn collapse_window(window: &WebviewWindow) -> Result<(), String> {
+    set_panel_width(window, 9.0)?;
+    dock_window(window)
 }
 
 fn dock_window(window: &WebviewWindow) -> Result<(), String> {
@@ -935,6 +1017,23 @@ fn ingest_paths(paths: Vec<String>, state: State<'_, AppState>) -> Result<ClipCa
     state.with_active_store(|store| store.upsert(capture))
 }
 
+#[tauri::command]
+fn set_clip_pinned(
+    id: String,
+    pinned: bool,
+    state: State<'_, AppState>,
+) -> Result<ClipCard, String> {
+    state.with_active_store(|store| store.set_pinned(&id, pinned))
+}
+
+#[tauri::command]
+fn image_preview_data_url(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    state.with_active_store(|store| store.image_preview_data_url(&id))
+}
+
 fn contents_from_payload(
     payload: RestorePayload,
 ) -> Result<(String, Vec<ClipboardContent>), String> {
@@ -1023,6 +1122,29 @@ fn set_history_persistence(enabled: bool, state: State<'_, AppState>) -> Result<
     state.set_history_persistence(enabled)
 }
 
+#[tauri::command]
+fn get_auto_paste(state: State<'_, AppState>) -> Result<bool, String> {
+    state.auto_paste()
+}
+
+#[tauri::command]
+fn set_auto_paste(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    state.set_auto_paste(enabled)
+}
+
+#[tauri::command]
+fn set_panel_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
+    if expanded {
+        set_panel_width(&window, 216.0)?;
+    } else {
+        collapse_window(&window)?;
+    }
+    dock_window(&window)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1034,6 +1156,7 @@ pub fn run() {
                 .map_err(|error| format!("ClipRaft data directory failed: {error}"))?;
             app.manage(AppState::open(&data_dir)?);
             if let Some(window) = app.get_webview_window("main") {
+                set_panel_width(&window, 9.0)?;
                 dock_window(&window)?;
                 let close_target = window.clone();
                 window.on_window_event(move |event| {
@@ -1052,10 +1175,15 @@ pub fn run() {
             delete_clip,
             undo_delete,
             ingest_paths,
+            set_clip_pinned,
+            image_preview_data_url,
             restore_clip,
             clear_history,
             get_history_persistence,
-            set_history_persistence
+            set_history_persistence,
+            get_auto_paste,
+            set_auto_paste,
+            set_panel_expanded
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipRaft");
@@ -1113,6 +1241,47 @@ mod tests {
     }
 
     #[test]
+    fn image_preview_is_exposed_as_a_local_data_url() {
+        let state = AppState::in_memory();
+        let png = vec![
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+            8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 96, 96, 96,
+            0, 0, 0, 4, 0, 1, 161, 13, 10, 45, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+        ];
+        let capture = ClipboardCapture {
+            card: ClipCard {
+                id: "image-card".to_string(),
+                kind: "image".to_string(),
+                preview: "PNG · 1×1".to_string(),
+                detail: "图片 · 已保存 PNG 快照".to_string(),
+                copied_at: now_label(),
+                use_count: 1,
+                pinned: false,
+            },
+            hash: digest_bytes("image/png\0", &png),
+            representations: vec![CapturedRepresentation::Bytes {
+                format: "image/png".to_string(),
+                value: png.clone(),
+            }],
+        };
+        let card = ingest_capture(&state, capture).expect("image capture");
+        let preview = state
+            .store
+            .lock()
+            .expect("store lock")
+            .image_preview_data_url(&card.id)
+            .expect("image preview")
+            .expect("image preview url");
+        assert_eq!(
+            preview,
+            format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(png)
+            )
+        );
+    }
+
+    #[test]
     fn soft_deleted_raft_can_be_restored() {
         let state = AppState::in_memory();
         let card = ingest_text(&state, "undo me".to_string()).expect("capture");
@@ -1132,6 +1301,37 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn pin_state_is_persisted_without_reordering_the_raft() {
+        let state = AppState::in_memory();
+        let first = ingest_text(&state, "first raft".to_string()).expect("first raft");
+        let second = ingest_text(&state, "second raft".to_string()).expect("second raft");
+        let pinned = state
+            .store
+            .lock()
+            .expect("store lock")
+            .list()
+            .expect("list cards");
+        assert_eq!(pinned[0].id, second.id);
+
+        let updated = state
+            .store
+            .lock()
+            .expect("store lock")
+            .set_pinned(&first.id, true)
+            .expect("pin raft");
+        assert!(updated.pinned);
+
+        let cards = state
+            .store
+            .lock()
+            .expect("store lock")
+            .list()
+            .expect("list after pin");
+        assert_eq!(cards[0].id, second.id);
+        assert!(cards.iter().any(|card| card.id == first.id && card.pinned));
     }
 
     #[test]
@@ -1164,5 +1364,19 @@ mod tests {
         let cards = state.with_active_store(|store| store.list()).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].id, persistent.id);
+    }
+
+    #[test]
+    fn auto_paste_setting_is_persistent_and_independent_from_history_mode() {
+        let state = AppState::in_memory();
+        assert!(state.auto_paste().expect("default auto paste"));
+        state.set_auto_paste(false).expect("disable auto paste");
+        assert!(!state.auto_paste().expect("read auto paste"));
+        state
+            .set_history_persistence(false)
+            .expect("disable history persistence");
+        assert!(!state
+            .auto_paste()
+            .expect("read auto paste after history change"));
     }
 }

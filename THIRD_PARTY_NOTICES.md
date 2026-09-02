@@ -6,6 +6,7 @@
 - React、React DOM、Vite、TypeScript：各自上游许可证，未复制其源代码。
 - `clipboard-rs`：MIT，提供 Windows 剪贴板读取与监听能力。
 - `blake3`：CC0-1.0 / Apache-2.0 / MIT，提供内容 hash。
+- `base64`：MIT / Apache-2.0，将本地 PNG 快照编码为 WebView 可显示的 data URL。
 
 ## 计划中的选择性复用
 

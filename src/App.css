@@ -15,6 +15,10 @@ button { border: 0; cursor: pointer; }
 
 .app-shell { position: relative; width: 100%; min-width: 0; height: 100%; pointer-events: none; }
 .creek-world { position: relative; width: 100%; height: 100%; overflow: hidden; isolation: isolate; }
+.creek-world.is-collapsed > :not(.edge-handle) { visibility: hidden; }
+.creek-world.is-collapsed::before, .creek-world.is-collapsed::after { opacity: 0; }
+.edge-handle { position: absolute; z-index: 9; top: 50%; right: 0; display: grid; place-items: center; width: 9px; height: 72px; padding: 0; background: linear-gradient(180deg, rgba(222, 183, 119, .96), rgba(108, 69, 39, .96)); border: 1px solid rgba(255, 226, 171, .64); border-right: 0; border-radius: 12px 0 0 12px; box-shadow: -3px 5px 12px rgba(3, 44, 48, .38), inset 1px 0 0 rgba(255,255,255,.34); transform: translateY(-50%); pointer-events: auto; }
+.edge-handle span { width: 3px; height: 30px; border-radius: 3px; background: rgba(255, 239, 195, .78); box-shadow: 0 0 6px rgba(255, 247, 215, .48); }
 .creek-world::before { position: absolute; z-index: 1; content: ""; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(4, 30, 38, .28), transparent 21%, transparent 78%, rgba(2, 30, 34, .34)); mix-blend-mode: multiply; opacity: .72; }
 .creek-world::after { position: absolute; z-index: 1; content: ""; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(255,255,255,.08), transparent 12%, transparent 84%, rgba(255,255,255,.06)); mix-blend-mode: screen; }
 .flow-backdrop { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; display: block; background: linear-gradient(180deg, rgba(12, 97, 105, .98), rgba(19, 139, 145, .98) 48%, rgba(10, 101, 108, .99)); pointer-events: none; }
@@ -68,6 +72,7 @@ button { border: 0; cursor: pointer; }
 .paper span { font-size: 7px; opacity: .73; }
 .paper small { justify-self: end; font-size: 7px; opacity: .6; }
 .image-preview { position: relative; height: 36px; margin: 0 2px 4px; overflow: hidden; border: 2px solid #f1e2c1; background: linear-gradient(#8bd4e5 0 54%, #5caeaa 55%); box-shadow: inset 0 0 5px rgba(30, 56, 59, .35), 0 2px 4px rgba(51,43,33,.35); }
+.image-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .sun { position: absolute; top: 6px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: #fff0ad; box-shadow: 0 0 8px rgba(255,241,170,.8); }
 .mountain { position: absolute; bottom: 4px; width: 72px; height: 41px; clip-path: polygon(0 100%, 37% 26%, 58% 55%, 76% 14%, 100% 100%); }
 .mountain-back { left: -17px; background: #6c8ea1; }
@@ -79,6 +84,7 @@ button { border: 0; cursor: pointer; }
 .raft-actions { position: absolute; z-index: 5; top: 8px; right: 8px; display: flex; gap: 4px; opacity: .86; transition: opacity .22s ease, transform .22s ease; }
 .raft-card:hover .raft-actions, .raft-card:focus-within .raft-actions { opacity: 1; transform: translateY(-1px); }
 .raft-actions button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; color: #fff2d7; background: rgba(111, 67, 36, .64); border: 1px solid rgba(255, 215, 156, .24); border-radius: 6px 5px 7px 4px; font-size: 9px; line-height: 1.1; }
+.raft-actions button.is-active { color: #fff8bf; background: rgba(139, 91, 34, .88); box-shadow: 0 0 7px rgba(255, 214, 111, .32); }
 .raft-card.is-removing { animation: raft-downstream .17s ease-in forwards; pointer-events: none; }
 .empty-water { padding: 42px 15px; color: rgba(240,255,246,.84); text-align: center; font-family: Georgia, serif; font-size: 15px; line-height: 1.75; }
 .empty-water span { font-family: "Segoe UI", sans-serif; font-size: 10px; opacity: .78; }
@@ -90,6 +96,7 @@ button { border: 0; cursor: pointer; }
 .detached-dock { position: absolute; z-index: 4; right: 30px; bottom: 55px; display: flex; gap: 3px; padding: 6px 6px 7px; background: linear-gradient(100deg, #694027, #b1783f 35%, #7a4a2c 70%, #a66d3b); clip-path: polygon(7% 9%, 25% 0, 51% 5%, 76% 1%, 96% 10%, 100% 77%, 83% 96%, 57% 92%, 31% 100%, 5% 89%, 0 25%); filter: drop-shadow(4px 8px 4px rgba(35, 26, 21, .35)); pointer-events: auto; }
 .detached-dock::after { position: absolute; content: ""; inset: 4px; border: 1px solid rgba(248,190,110,.36); clip-path: inherit; pointer-events: none; }
 .detached-dock button { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; color: #5d422d; background: linear-gradient(145deg, #f6d9a4, #c5955b); border: 1px solid #845a32; border-radius: 9px 6px 8px 7px; box-shadow: 0 2px 0 rgba(74,44,25,.35), inset 1px 1px 2px rgba(255,255,255,.48); }
+.detached-dock button:disabled { cursor: not-allowed; opacity: .42; filter: saturate(.55); }
 .detached-dock button:nth-child(2) { transform: rotate(2deg); }
 .detached-dock button:nth-child(3) { transform: rotate(-3deg); }
 .status-strip { position: absolute; z-index: 4; right: 11px; bottom: 16px; left: 11px; display: flex; align-items: center; gap: 5px; color: rgba(245,255,248,.9); font-size: 8px; pointer-events: auto; }
