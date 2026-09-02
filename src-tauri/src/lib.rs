@@ -16,6 +16,13 @@ use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
+use windows_sys::Win32::Foundation::HWND;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VK_V,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    GetForegroundWindow, IsWindow, SetForegroundWindow,
+};
 
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
 const MAX_CARDS: i64 = 200;
@@ -71,6 +78,7 @@ pub struct AppState {
     session_store: Mutex<SqliteStore>,
     persistence_enabled: Mutex<bool>,
     session_resource_dir: Option<PathBuf>,
+    last_active_window: Mutex<Option<usize>>,
     ignored_hashes: Mutex<HashMap<String, Instant>>,
 }
 
@@ -93,6 +101,7 @@ impl AppState {
             session_store: Mutex::new(session_store),
             persistence_enabled: Mutex::new(persistence_enabled),
             session_resource_dir: Some(session_resource_dir),
+            last_active_window: Mutex::new(None),
             ignored_hashes: Mutex::new(HashMap::new()),
         })
     }
@@ -104,6 +113,7 @@ impl AppState {
             session_store: Mutex::new(SqliteStore::in_memory()),
             persistence_enabled: Mutex::new(true),
             session_resource_dir: None,
+            last_active_window: Mutex::new(None),
             ignored_hashes: Mutex::new(HashMap::new()),
         }
     }
@@ -163,6 +173,96 @@ impl Drop for AppState {
         if let Some(session_resource_dir) = &self.session_resource_dir {
             let _ = fs::remove_dir_all(session_resource_dir);
         }
+    }
+}
+
+fn remember_foreground_window(state: &AppState) {
+    let window = unsafe { GetForegroundWindow() };
+    if window.is_null() {
+        return;
+    }
+    if let Ok(mut last_active_window) = state.last_active_window.lock() {
+        *last_active_window = Some(window as usize);
+    }
+}
+
+fn paste_to_previous_window(state: &AppState) -> Result<(), String> {
+    let handle = state
+        .last_active_window
+        .lock()
+        .map_err(|_| "active window lock poisoned".to_string())?
+        .to_owned()
+        .ok_or_else(|| "previous active window unavailable".to_string())?;
+    let window = handle as HWND;
+    if unsafe { IsWindow(window) } == 0 {
+        return Err("previous active window is no longer available".to_string());
+    }
+    if unsafe { SetForegroundWindow(window) } == 0 {
+        return Err("previous active window rejected focus".to_string());
+    }
+    thread::sleep(Duration::from_millis(35));
+
+    let inputs = [
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_CONTROL,
+                    wScan: 0,
+                    dwFlags: 0,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        },
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_V,
+                    wScan: 0,
+                    dwFlags: 0,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        },
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_V,
+                    wScan: 0,
+                    dwFlags: KEYEVENTF_KEYUP,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        },
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_CONTROL,
+                    wScan: 0,
+                    dwFlags: KEYEVENTF_KEYUP,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        },
+    ];
+    let sent = unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        )
+    };
+    if sent == inputs.len() as u32 {
+        Ok(())
+    } else {
+        Err("paste input was rejected".to_string())
     }
 }
 
@@ -724,6 +824,7 @@ impl ClipboardHandler for ClipboardChangeHandler {
             return;
         };
         if let Some(card) = ingest_capture(&state, capture) {
+            remember_foreground_window(&state);
             expand_window(&self.app);
             let _ = self.app.emit(CLIPBOARD_UPDATED, card);
         }
@@ -884,7 +985,7 @@ fn contents_from_payload(
 }
 
 #[tauri::command]
-fn restore_clip(id: String, state: State<'_, AppState>) -> Result<(), String> {
+fn restore_clip(id: String, auto_paste: bool, state: State<'_, AppState>) -> Result<(), String> {
     let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
     let (hash, contents) = contents_from_payload(payload)?;
     {
@@ -900,6 +1001,9 @@ fn restore_clip(id: String, state: State<'_, AppState>) -> Result<(), String> {
             ignored.remove(&hash);
         }
         return Err(error.to_string());
+    }
+    if auto_paste {
+        let _ = paste_to_previous_window(&state);
     }
     Ok(())
 }

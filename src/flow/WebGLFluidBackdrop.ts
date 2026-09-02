@@ -234,9 +234,9 @@ const displaySource = `#version 300 es
   float raftWaveRing(vec2 uv, vec3 raft, float time) {
     vec2 delta = (uv - raft.xy) * u_resolution;
     float radius = length(delta / vec2(1.0, 1.28));
-    float ringRadius = 24.0 + mod(time * 15.0 + raft.z * 30.0, 116.0);
-    float outer = 1.0 - smoothstep(0.0, 9.0, abs(radius - ringRadius));
-    float inner = 1.0 - smoothstep(0.0, 7.0, abs(radius - ringRadius * 0.62));
+    float ringRadius = 66.0 + mod(time * 12.0 + raft.z * 30.0, 100.0);
+    float outer = 1.0 - smoothstep(0.0, 11.0, abs(radius - ringRadius));
+    float inner = 1.0 - smoothstep(0.0, 8.0, abs(radius - ringRadius * 0.62));
     return (outer * 0.7 + inner * 0.3) * exp(-ringRadius * 0.007) * raft.z;
   }
 
@@ -264,8 +264,10 @@ const displaySource = `#version 300 es
     float center = riverCenter(uv.y, time * 0.7);
     float across = (uv.x - center) * u_resolution.x;
     float along = uv.y * u_resolution.y;
-    float broad = sin(across * 0.075 + sin(along * 0.010 - time * 0.65) * 1.7 + time * 0.18);
-    float middle = sin(across * 0.16 + sin(along * 0.021 + time * 0.9) * 0.72 - time * 0.3);
+    vec2 flow = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy;
+    float flowLift = dot(flow, vec2(1.2, -0.8));
+    float broad = sin(across * 0.075 + sin(along * 0.010 - time * 0.65) * 1.7 + time * 0.18 + flowLift * 0.65);
+    float middle = sin(across * 0.16 + sin(along * 0.021 + time * 0.9) * 0.72 - time * 0.3 + flowLift * 0.35);
     float fine = sin(across * 0.31 + sin(along * 0.037 - time * 0.7) * 0.34 + time * 0.2);
     float raftDisplacement = raftRippleField(uv, time);
     return broad * 0.018 + middle * 0.005 + fine * 0.001 + raftDisplacement * 0.003;
@@ -275,7 +277,8 @@ const displaySource = `#version 300 es
     float center = riverCenter(uv.y, time * 0.7);
     float across = (uv.x - center) * u_resolution.x;
     float along = uv.y * u_resolution.y;
-    float bend = sin(along * 0.012 + time * 0.6) * 1.55 + sin(along * 0.027 - time * 0.45) * 0.48;
+    float flowWarp = flowCoordinates(uv, time).x - ((uv.x - center) * 6.9 + uv.y * 0.8);
+    float bend = sin(along * 0.012 + time * 0.6) * 1.55 + sin(along * 0.027 - time * 0.45) * 0.48 + flowWarp * 0.8;
     float broad = smoothstep(0.6, 0.94, 0.5 + 0.5 * cos(across * 0.1 + bend));
     float fineBend = sin(along * 0.023 - time * 0.8) * 0.74;
     float fine = smoothstep(0.74, 0.98, 0.5 + 0.5 * cos(across * 0.22 + fineBend));
@@ -286,12 +289,16 @@ const displaySource = `#version 300 es
     float center = riverCenter(uv.y, time * 0.7);
     float across = (uv.x - center) * u_resolution.x;
     float along = uv.y * u_resolution.y;
+    vec2 flow = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy;
+    float flowWarp = flowCoordinates(uv, time).x - ((uv.x - center) * 6.9 + uv.y * 0.8);
     float broadBend = sin(along * 0.010 + time * 0.7) * 1.6
       + sin(along * 0.023 - time * 0.45) * 0.62
-      + (fbm(vec2(uv.x * 0.8 + time * 0.02, uv.y * 1.0 - time * 0.04)) - 0.5) * 1.2;
+      + (fbm(vec2(uv.x * 0.8 + time * 0.02, uv.y * 1.0 - time * 0.04)) - 0.5) * 1.2
+      + flowWarp * 0.9 + dot(flow, vec2(0.8, -0.5)) * 1.6;
     float broad = smoothstep(0.58, 0.94, 0.5 + 0.5 * cos(across * 0.105 + broadBend));
     float fineBend = sin(along * 0.018 - time * 1.0) * 1.05 + sin(along * 0.041 + time * 0.55) * 0.34
-      + (fbm(vec2(uv.x * 1.2 - time * 0.02, uv.y * 1.6 - time * 0.06)) - 0.5) * 0.7;
+      + (fbm(vec2(uv.x * 1.2 - time * 0.02, uv.y * 1.6 - time * 0.06)) - 0.5) * 0.7
+      + flowWarp * 0.45 + dot(flow, vec2(0.45, -0.3));
     float fine = smoothstep(0.72, 0.97, 0.5 + 0.5 * cos(across * 0.205 + fineBend));
     return clamp(broad * 0.76 + fine * 0.3, 0.0, 1.0);
   }

@@ -100,10 +100,12 @@ function useRaftMotion(cards: ClipCard[], refs: MutableRefObject<Map<string, HTM
   }, [cards, refs]);
 }
 
-function RaftCard({ card, index, removing, onDelete, onRestore, onDragStart, onDragEnd, setRef }: {
+function RaftCard({ card, index, removing, selected, onSelect, onDelete, onRestore, onDragStart, onDragEnd, setRef }: {
   card: ClipCard;
   index: number;
   removing: boolean;
+  selected: boolean;
+  onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onRestore: (id: string) => void;
   onDragStart: (id: string) => void;
@@ -114,8 +116,12 @@ function RaftCard({ card, index, removing, onDelete, onRestore, onDragStart, onD
     <div className="raft-motion" ref={setRef}>
       <div className={`raft-wake wake-${index % 3}`} aria-hidden="true"><span /><span /><span /></div>
       <article
-        className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${removing ? "is-removing" : ""}`}
+        className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${selected ? "is-selected" : ""} ${removing ? "is-removing" : ""}`}
+        tabIndex={0}
+        aria-selected={selected}
         draggable={!removing}
+        onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onSelect(card.id); }}
+        onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onRestore(card.id); } }}
         onDragStart={() => onDragStart(card.id)}
         onDragEnd={onDragEnd}
       >
@@ -148,6 +154,7 @@ function App() {
   const [notice, setNotice] = useState("复制内容会在这里顺流靠岸");
   const [autoPaste, setAutoPaste] = useState(true);
   const [historyPersistence, setHistoryPersistence] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingOverTrash, setDraggingOverTrash] = useState(false);
   const [undoableId, setUndoableId] = useState<string | null>(null);
@@ -257,8 +264,9 @@ function App() {
   };
 
   const restoreCard = async (id: string) => {
-    try { await invoke("restore_clip", { id }); } catch { /* browser preview */ }
-    setNotice("内容已复制到系统剪贴板");
+    setSelectedId(id);
+    try { await invoke("restore_clip", { id, autoPaste }); } catch { /* browser preview */ }
+    setNotice(autoPaste ? "内容已复制并尝试粘贴到上个应用" : "内容已复制到系统剪贴板");
   };
 
   const toggleHistoryPersistence = async () => {
@@ -308,7 +316,7 @@ function App() {
 
         <section className="history-stream" aria-live="polite">
           {visibleCards.length ? visibleCards.map((card, index) => (
-            <RaftCard key={card.id} card={card} index={index} removing={removingId === card.id} onDelete={deleteCard} onRestore={restoreCard} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
+            <RaftCard key={card.id} card={card} index={index} removing={removingId === card.id} selected={selectedId === card.id} onSelect={setSelectedId} onDelete={deleteCard} onRestore={restoreCard} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
           )) : <div className="empty-water">水面很安静<br /><span>复制一点内容，让木筏靠岸</span></div>}
         </section>
 
@@ -329,7 +337,7 @@ function App() {
           <span className="status-dot" />
           <span>{notice}</span>
           {undoableId && <button className="undo-action" onClick={() => void undoDelete()}>撤销</button>}
-          <button className={`auto-paste ${autoPaste ? "is-on" : ""}`} onClick={() => { setAutoPaste((value) => !value); setNotice("自动粘贴将在下一阶段接入"); }}>{autoPaste ? "自动粘贴" : "仅复制"}</button>
+          <button className={`auto-paste ${autoPaste ? "is-on" : ""}`} aria-pressed={autoPaste} onClick={() => { setAutoPaste((value) => !value); setNotice(autoPaste ? "已关闭自动粘贴，仅复制" : "已开启自动粘贴"); }}>{autoPaste ? "自动粘贴" : "仅复制"}</button>
         </div>
       </div>
     </main>
