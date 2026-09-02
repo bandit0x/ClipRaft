@@ -49,9 +49,9 @@ button { border: 0; cursor: pointer; }
 .raft-card:hover { filter: brightness(1.09) drop-shadow(0 18px 11px rgba(2, 45, 50, .32)); }
 .raft-card.is-selected { filter: brightness(1.08) drop-shadow(0 0 7px rgba(203, 255, 221, .58)) drop-shadow(0 17px 11px rgba(2, 45, 50, .34)); }
 .raft-card:focus-visible { outline: 2px solid rgba(226, 255, 226, .92); outline-offset: 4px; }
-.raft-tilt-0 { transform: rotate(-2.7deg); }
-.raft-tilt-1 { transform: rotate(2.2deg); }
-.raft-tilt-2 { transform: rotate(-1.4deg); }
+.raft-tilt-0 { transform: rotate(-2.7deg) scale(.76); }
+.raft-tilt-1 { transform: rotate(2.2deg) scale(.76); }
+.raft-tilt-2 { transform: rotate(-1.4deg) scale(.76); }
 .raft-rope { position: absolute; left: -4px; right: -4px; height: 6px; border: 2px solid #4b2d21; border-radius: 50%; background: repeating-linear-gradient(100deg, #d9aa70 0 4px, #a76e3c 4px 7px); box-shadow: 0 1px 0 rgba(255,255,255,.24), 0 2px 2px rgba(32, 18, 11, .32); }
 .rope-top { top: 9px; transform: rotate(-1deg); }
 .rope-bottom { bottom: 9px; transform: rotate(2deg); }
@@ -103,5 +103,5 @@ button { border: 0; cursor: pointer; }
 @keyframes wake-drift { 0%, 100% { opacity: .28; transform: translateX(-50%) translateY(0) scaleX(.78); } 50% { opacity: .64; transform: translateX(-50%) translateY(8px) scaleX(1.04); } }
 @keyframes bow-ring { 0%, 100% { opacity: .24; transform: translateX(-50%) rotate(-4deg) scale(.86); } 50% { opacity: .62; transform: translateX(-50%) rotate(-4deg) scale(1.04); } }
 @keyframes raft-ripple { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); } 14% { opacity: .44; } 74% { opacity: .13; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(1.18); } }
-@keyframes raft-downstream { to { opacity: 0; transform: translate3d(24px, 28px, 0) rotate(4deg); } }
+@keyframes raft-downstream { to { opacity: 0; transform: translate3d(24px, 28px, 0) rotate(4deg) scale(.76); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }

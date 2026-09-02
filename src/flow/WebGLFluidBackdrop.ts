@@ -56,6 +56,24 @@ const splatSource = `#version 300 es
   }
 `;
 
+const dyeSplatSource = `#version 300 es
+  precision highp float;
+  in vec2 v_uv;
+  uniform sampler2D u_target;
+  uniform float u_aspect_ratio;
+  uniform vec2 u_point;
+  uniform vec3 u_amount;
+  uniform float u_radius;
+  out vec4 out_color;
+  void main() {
+    vec2 p = v_uv - u_point;
+    p.x *= u_aspect_ratio;
+    float splat = exp(-dot(p, p) / u_radius);
+    vec3 base = texture(u_target, v_uv).rgb;
+    out_color = vec4(base + splat * u_amount, 1.0);
+  }
+`;
+
 const curlSource = `#version 300 es
   precision highp float;
   in vec2 v_uv;
@@ -169,12 +187,29 @@ const advectionSource = `#version 300 es
   }
 `;
 
+const dyeAdvectionSource = `#version 300 es
+  precision highp float;
+  in vec2 v_uv;
+  uniform sampler2D u_velocity;
+  uniform sampler2D u_source;
+  uniform vec2 u_texel_size;
+  uniform float u_dt;
+  uniform float u_dissipation;
+  out vec4 out_color;
+  void main() {
+    vec2 coordinate = v_uv - u_dt * texture(u_velocity, v_uv).xy * u_texel_size;
+    vec4 result = texture(u_source, coordinate);
+    out_color = vec4(result.rgb / (1.0 + u_dissipation * u_dt), 1.0);
+  }
+`;
+
 const displaySource = `#version 300 es
   precision highp float;
   in vec2 v_uv;
   uniform sampler2D u_velocity;
   uniform vec2 u_velocity_texel_size;
   uniform sampler2D u_water_texture;
+  uniform sampler2D u_dye;
   uniform float u_time;
   uniform vec2 u_resolution;
   uniform vec3 u_raft_points[6];
@@ -360,6 +395,7 @@ const displaySource = `#version 300 es
     float foam = raftFoamField(uv, time);
     float ribbons = waterRibbons(uv, time);
     vec2 displayFlow = smoothVelocity(uv);
+    float surfaceSheen = smoothstep(0.04, 0.34, texture(u_dye, clamp(uv, 0.001, 0.999)).r);
     float depthTone = fbm(flowCoordinates(uv, time) * 0.45 + vec2(time * 0.025, -time * 0.018));
     float grain = depthTone;
     float sunwash = smoothstep(0.26, 0.76, depthTone);
@@ -383,6 +419,7 @@ const displaySource = `#version 300 es
     color += vec3(0.5, 0.92, 0.74) * waveRing * 0.86 * edge;
     color += vec3(0.38, 0.82, 0.67) * smoothstep(0.7, 0.98, causticLight) * 0.32 * edge;
     color += vec3(0.68, 0.96, 0.8) * foam * 0.6 * edge;
+    color += vec3(0.42, 0.84, 0.72) * surfaceSheen * 0.16 * edge;
     color *= 0.9;
     color += vec3(0.43, 0.76, 0.67) * shallow_edge * 0.19;
     color += vec3(0.018, 0.11, 0.14) * depth;
@@ -462,25 +499,29 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   if (!gl || !gl.getExtension("EXT_color_buffer_float")) return { setRafts: () => undefined, cleanup: () => undefined };
 
   const splatProgram = createProgram(gl, splatSource);
+  const dyeSplatProgram = createProgram(gl, dyeSplatSource);
   const curlProgram = createProgram(gl, curlSource);
   const vorticityProgram = createProgram(gl, vorticitySource);
   const divergenceProgram = createProgram(gl, divergenceSource);
   const pressureProgram = createProgram(gl, pressureSource);
   const gradientProgram = createProgram(gl, gradientSource);
   const advectionProgram = createProgram(gl, advectionSource);
+  const dyeAdvectionProgram = createProgram(gl, dyeAdvectionSource);
   const displayProgram = createProgram(gl, displaySource);
-  const programs = [splatProgram, curlProgram, vorticityProgram, divergenceProgram, pressureProgram, gradientProgram, advectionProgram, displayProgram];
+  const programs = [splatProgram, dyeSplatProgram, curlProgram, vorticityProgram, divergenceProgram, pressureProgram, gradientProgram, advectionProgram, dyeAdvectionProgram, displayProgram];
   if (programs.some((program) => !program)) return { setRafts: () => undefined, cleanup: () => undefined };
 
   const uniforms = {
     splat: getUniforms(gl, splatProgram!, ["u_target", "u_aspect_ratio", "u_point", "u_amount", "u_radius"]),
+    dyeSplat: getUniforms(gl, dyeSplatProgram!, ["u_target", "u_aspect_ratio", "u_point", "u_amount", "u_radius"]),
     curl: getUniforms(gl, curlProgram!, ["u_velocity", "u_texel_size"]),
     vorticity: getUniforms(gl, vorticityProgram!, ["u_velocity", "u_curl", "u_texel_size", "u_curl_strength", "u_dt"]),
     divergence: getUniforms(gl, divergenceProgram!, ["u_velocity", "u_texel_size"]),
     pressure: getUniforms(gl, pressureProgram!, ["u_pressure", "u_divergence", "u_texel_size"]),
     gradient: getUniforms(gl, gradientProgram!, ["u_pressure", "u_velocity", "u_texel_size"]),
     advection: getUniforms(gl, advectionProgram!, ["u_velocity", "u_source", "u_texel_size", "u_dt", "u_dissipation"]),
-    display: getUniforms(gl, displayProgram!, ["u_velocity", "u_velocity_texel_size", "u_water_texture", "u_time", "u_resolution", "u_raft_points[0]", "u_raft_count"]),
+    dyeAdvection: getUniforms(gl, dyeAdvectionProgram!, ["u_velocity", "u_source", "u_texel_size", "u_dt", "u_dissipation"]),
+    display: getUniforms(gl, displayProgram!, ["u_velocity", "u_velocity_texel_size", "u_water_texture", "u_dye", "u_time", "u_resolution", "u_raft_points[0]", "u_raft_count"]),
   };
 
   const vao = gl.createVertexArray();
@@ -519,6 +560,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   let divergence: RenderTarget | null = null;
   let curl: RenderTarget | null = null;
   let pressure: DoubleTarget | null = null;
+  let dye: DoubleTarget | null = null;
   let simWidth = 0;
   let simHeight = 0;
   const raftData = new Float32Array(18);
@@ -545,10 +587,12 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   const destroyTargets = () => {
     if (velocity) { destroyTarget(gl, velocity.read); destroyTarget(gl, velocity.write); }
     if (pressure) { destroyTarget(gl, pressure.read); destroyTarget(gl, pressure.write); }
+    if (dye) { destroyTarget(gl, dye.read); destroyTarget(gl, dye.write); }
     if (divergence) destroyTarget(gl, divergence);
     if (curl) destroyTarget(gl, curl);
     velocity = null;
     pressure = null;
+    dye = null;
     divergence = null;
     curl = null;
   };
@@ -562,11 +606,13 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
     const nextPressure = createDoubleTarget(gl, width, height);
     const nextDivergence = createTarget(gl, width, height);
     const nextCurl = createTarget(gl, width, height);
-    if (!nextVelocity || !nextPressure || !nextDivergence || !nextCurl) return;
+    const nextDye = createDoubleTarget(gl, width, height);
+    if (!nextVelocity || !nextPressure || !nextDivergence || !nextCurl || !nextDye) return;
     velocity = nextVelocity;
     pressure = nextPressure;
     divergence = nextDivergence;
     curl = nextCurl;
+    dye = nextDye;
     simWidth = width;
     simHeight = height;
     gl.bindFramebuffer(gl.FRAMEBUFFER, velocity.read.fbo);
@@ -577,6 +623,10 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
     gl.bindFramebuffer(gl.FRAMEBUFFER, pressure.read.fbo);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, pressure.write.fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dye.read.fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dye.write.fbo);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   };
@@ -609,6 +659,18 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
     velocity.swap();
   };
 
+  const splatDye = (x: number, y: number, amount: number, radius = 0.012) => {
+    if (!dye) return;
+    draw(dyeSplatProgram!, dye.write, () => {
+      bindTexture(dye!.read.texture, 0, uniforms.dyeSplat.u_target);
+      gl.uniform1f(uniforms.dyeSplat.u_aspect_ratio, canvas.width / Math.max(1, canvas.height));
+      gl.uniform2f(uniforms.dyeSplat.u_point, x, y);
+      gl.uniform3f(uniforms.dyeSplat.u_amount, amount, amount, amount);
+      gl.uniform1f(uniforms.dyeSplat.u_radius, radius);
+    });
+    dye!.swap();
+  };
+
   const emitRaftImpulses = () => {
     if (!raftImpulseQueue.length) return;
     const rafts = raftImpulseQueue;
@@ -618,6 +680,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
       splat(raft.x, raft.y, 0.0, -force, 0.006);
       splat(raft.x - 0.02, raft.y + 0.006, force * 0.34, -force * 0.42, 0.004);
       splat(raft.x + 0.02, raft.y + 0.006, -force * 0.34, -force * 0.42, 0.004);
+      splatDye(raft.x, raft.y, 0.2 + raft.strength * 0.08, 0.014);
     });
   };
 
@@ -675,6 +738,15 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
       gl.uniform1f(uniforms.advection.u_dissipation, 0.08);
     });
     velocity.swap();
+
+    draw(dyeAdvectionProgram!, dye!.write, () => {
+      bindTexture(velocity!.read.texture, 0, uniforms.dyeAdvection.u_velocity);
+      bindTexture(dye!.read.texture, 1, uniforms.dyeAdvection.u_source);
+      gl.uniform2f(uniforms.dyeAdvection.u_texel_size, velocity!.read.texelX, velocity!.read.texelY);
+      gl.uniform1f(uniforms.dyeAdvection.u_dt, dt);
+      gl.uniform1f(uniforms.dyeAdvection.u_dissipation, 0.42);
+    });
+    dye!.swap();
   };
 
   const resize = () => {
@@ -690,6 +762,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
 
   for (let index = 0; index < 10; index += 1) {
     splat(0.5 + Math.sin(index * 2.3) * 0.06, 0.12 + index * 0.085, Math.sin(index * 1.7) * 0.04, -0.12, 0.009);
+    splatDye(0.5 + Math.sin(index * 2.3) * 0.06, 0.12 + index * 0.085, 0.1, 0.018);
   }
 
   let frame = 0;
@@ -709,6 +782,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
       draw(displayProgram!, null, () => {
         bindTexture(velocity!.read.texture, 0, uniforms.display.u_velocity);
         bindTexture(waterTexture, 1, uniforms.display.u_water_texture);
+        bindTexture(dye!.read.texture, 2, uniforms.display.u_dye);
         gl.uniform2f(uniforms.display.u_velocity_texel_size, velocity!.read.texelX, velocity!.read.texelY);
         gl.uniform1f(uniforms.display.u_time, now / 1000);
         gl.uniform2f(uniforms.display.u_resolution, canvas.width, canvas.height);
