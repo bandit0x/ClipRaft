@@ -253,18 +253,19 @@ const displaySource = `#version 300 es
   }
 
   vec3 blurredWaterMaterial(vec2 uv, float time, vec2 flow) {
-    vec2 drift = vec2(time * 0.006, -time * 0.004) + flow * vec2(0.24, 0.1);
+    vec2 drift = vec2(time * 0.06, -time * 0.045) + flow * vec2(0.48, 0.2);
     vec2 point = uv * vec2(2.2, 4.2) + vec2(0.17, 0.31) + drift;
-    vec2 offset = vec2(0.012, 0.01);
-    vec3 material = textureLod(u_water_texture, point, 2.2).rgb * 0.2;
-    material += textureLod(u_water_texture, clamp(point + vec2(offset.x, 0.0), 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point - vec2(offset.x, 0.0), 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point + vec2(0.0, offset.y), 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point - vec2(0.0, offset.y), 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point + offset, 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point + vec2(offset.x, -offset.y), 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point + vec2(-offset.x, offset.y), 0.02, 0.98), 2.2).rgb * 0.1;
-    material += textureLod(u_water_texture, clamp(point - offset, 0.02, 0.98), 2.2).rgb * 0.1;
+    vec2 offset = vec2(0.009, 0.008);
+    float mip = 1.45;
+    vec3 material = textureLod(u_water_texture, point, mip).rgb * 0.2;
+    material += textureLod(u_water_texture, clamp(point + vec2(offset.x, 0.0), 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point - vec2(offset.x, 0.0), 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point + vec2(0.0, offset.y), 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point - vec2(0.0, offset.y), 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point + offset, 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point + vec2(offset.x, -offset.y), 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point + vec2(-offset.x, offset.y), 0.02, 0.98), mip).rgb * 0.1;
+    material += textureLod(u_water_texture, clamp(point - offset, 0.02, 0.98), mip).rgb * 0.1;
     return material;
   }
 
@@ -445,17 +446,17 @@ const displaySource = `#version 300 es
     vec3 deep = vec3(0.008, 0.16, 0.2);
     vec3 plateTone = blurredWaterMaterial(uv + vec2(height * 0.8, height_y * 0.2), time, displayFlow);
     vec3 naturalWater = mix(deep, shallow, 0.2 + depthTone * 0.24 + diffuse * 0.07);
-    vec3 color = mix(naturalWater, plateTone * vec3(0.72, 0.9, 0.9), 0.3);
+    vec3 color = mix(naturalWater, plateTone * vec3(0.72, 0.9, 0.9), 0.62);
     color += vec3(0.012, 0.05, 0.055) * grain * edge;
     color += vec3(0.025, 0.11, 0.12) * diffuse * edge;
-    color += vec3(0.08, 0.23, 0.23) * causticLight * (0.12 + sunwash * 0.08) * edge;
-    color += vec3(0.14, 0.36, 0.32) * ribbons * 0.04 * edge;
-    color += vec3(0.36, 0.76, 0.64) * specular * (0.14 + sunwash * 0.1) * edge;
-    color += vec3(0.35, 0.72, 0.6) * crest * 0.18 * edge;
-    color += vec3(0.5, 0.92, 0.74) * waveRing * 0.86 * edge;
+    color += vec3(0.08, 0.23, 0.23) * causticLight * (0.18 + sunwash * 0.12) * edge;
+    color += vec3(0.14, 0.36, 0.32) * ribbons * 0.07 * edge;
+    color += vec3(0.36, 0.76, 0.64) * specular * (0.2 + sunwash * 0.14) * edge;
+    color += vec3(0.35, 0.72, 0.6) * crest * 0.24 * edge;
+    color += vec3(0.5, 0.92, 0.74) * waveRing * 1.12 * edge;
     color += vec3(0.38, 0.82, 0.67) * smoothstep(0.78, 0.98, causticLight) * 0.12 * edge;
-    color += vec3(0.68, 0.96, 0.8) * foam * 0.9 * edge;
-    color += vec3(0.42, 0.84, 0.72) * surfaceSheen * 0.24 * edge;
+    color += vec3(0.68, 0.96, 0.8) * foam * 1.28 * edge;
+    color += vec3(0.42, 0.84, 0.72) * surfaceSheen * 0.34 * edge;
     color += vec3(0.64, 0.96, 0.82) * sparkle * 0.04 * edge;
     color *= 0.9;
     color += vec3(0.43, 0.76, 0.67) * shallow_edge * 0.19;
