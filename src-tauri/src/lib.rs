@@ -931,6 +931,13 @@ pub fn run() {
             app.manage(AppState::open(&data_dir)?);
             if let Some(window) = app.get_webview_window("main") {
                 dock_window(&window)?;
+                let close_target = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = close_target.hide();
+                    }
+                });
             }
             setup_tray(app)?;
             start_clipboard_watcher(app.handle().clone());
