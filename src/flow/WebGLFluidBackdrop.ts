@@ -307,7 +307,8 @@ const displaySource = `#version 300 es
     float angle = atan(delta.x, delta.y);
     float wobble = 1.0 + 0.08 * sin(angle * 3.0 + time * 1.1) + 0.045 * sin(angle * 5.0 - time * 0.7);
     float ring = exp(-pow(abs(radius / wobble - ringRadius) / ringWidth, 2.0));
-    float breakup = 0.58 + 0.42 * fbm(delta * 0.024 + vec2(time * 0.07, -time * 0.04));
+    float ringNoise = fbm(vec2(angle * 2.4 + time * 0.12, radius * 0.022 - time * 0.08));
+    float breakup = 0.3 + 0.7 * smoothstep(0.4, 0.72, ringNoise);
     return ring * breakup * exp(-ringRadius * 0.008) * raft.z;
   }
 
