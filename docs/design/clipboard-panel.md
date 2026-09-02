@@ -10,10 +10,10 @@ The approved reference is `.impeccable/mocks/creek-c-meander.png`. It defines th
 
 - The expanded panel is a narrow, transparent-edged summer creek, targeting 190–210 logical pixels before Windows DPI scaling.
 - A few rounded stones, sparse foliage accents, shallow turquoise water, and sunlight establish the banks. Water and working content dominate; continuous pebble borders, dense grass, floral scatter, and garden-like decoration are excluded.
-- Clipboard items are small, thick wooden rafts floating inside the creek. Their visible area is approximately one third of the first selected reference, leaving generous water between items. Their silhouette may vary, while their interaction bounds and alignment remain predictable.
+- Clipboard items are medium-small, thick wooden rafts floating inside the creek. They remain clearly readable at 125% Windows scaling while preserving generous water between items. Their silhouette may vary, while their interaction bounds and alignment remain predictable.
 - Text cards carry a parchment sheet; image cards carry a framed preview; file cards carry a folder or document plaque. Type is readable Simplified Chinese rather than decorative lettering.
-- The title and search affordance live on river stones near the upstream edge. Search can expand into a readable input without widening the resting panel.
-- Search, pin/filter, and settings sit on a compact wooden dock at the bottom. The dock is about half the creek width and never touches the final raft.
+- The title and search affordance live in separate, slightly irregular wooden cabins near the upstream edge. They are seen strictly from above: roof planes, a horizontal ridge, chimney or skylight, and a downstream cast shadow establish the form without visible walls or supports.
+- Search, pin/filter, and settings sit as roof-hatch-like controls on a compact top-down wooden cabin at the bottom. The cabin is about half the creek width and never touches the final raft.
 
 ## Motion thesis
 
@@ -25,7 +25,7 @@ The focal motion is river continuity: when a raft disappears or changes position
 2. Rafts below the vacated slot move upstream along a shallow curved path. Use FLIP-style transforms so document layout is committed immediately while pixels preserve their previous position.
 3. Upstream travel lasts 420–560 ms according to distance, with `cubic-bezier(0.16, 1, 0.3, 1)`. Adjacent rafts start 24–36 ms apart, capped at 120 ms total stagger.
 4. Each raft may sway laterally by 4–8 px and rotate no more than 0.8 degrees before settling. There is no bounce, spring overshoot, or elastic snap.
-5. A restrained wake or ripple may trail the moving raft for at most 240 ms. Continuous water animation must be extremely subtle and stop while the panel is hidden.
+5. Each visible raft maintains a restrained hull ring, side foam, and downstream wake. The raft itself rises, falls, and rolls by only a few pixels/degrees; continuous animation stops while the panel is hidden.
 
 Repeated copy or delete actions retarget from the current visual position instead of queuing animations. Pinned items retain their ordering contract. A five-second undo reverses the spatial transition from the current state without replaying the entire sequence.
 

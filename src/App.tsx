@@ -380,7 +380,38 @@ function App() {
         {!expanded && <button className="edge-handle" onClick={() => openPanel()} aria-label="打开 ClipRaft"><span /></button>}
         {expanded && <FlowBackdrop rafts={raftAnchors} />}
         <div className="water-photo-material" aria-hidden="true" />
-        <div className="water-caustic-layer" aria-hidden="true" />
+        <svg className="water-caustic-layer" viewBox="0 0 216 900" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <filter id="fine-caustic" x="-12%" y="-6%" width="124%" height="112%" colorInterpolationFilters="sRGB">
+              <feTurbulence type="turbulence" baseFrequency="0.052" numOctaves="2" seed="19" result="waterNoise">
+                <animate attributeName="baseFrequency" dur="11s" values="0.049;0.057;0.051;0.049" repeatCount="indefinite" />
+              </feTurbulence>
+              <feConvolveMatrix in="waterNoise" order="3" kernelMatrix="-1 -1 -1 -1 8 -1 -1 -1 -1" bias="0.2" result="waterEdges" />
+              <feColorMatrix in="waterEdges" type="luminanceToAlpha" result="edgeAlpha" />
+              <feComponentTransfer in="edgeAlpha" result="cutEdges">
+                <feFuncA type="table" tableValues="0 0 0.08 0.42 0.9 0.38 0.04 0" />
+              </feComponentTransfer>
+              <feGaussianBlur in="cutEdges" stdDeviation="0.32" result="softEdges" />
+              <feFlood floodColor="#d8fff1" floodOpacity="0.82" result="causticColor" />
+              <feComposite in="causticColor" in2="softEdges" operator="in" />
+            </filter>
+            <filter id="micro-caustic" x="-12%" y="-6%" width="124%" height="112%" colorInterpolationFilters="sRGB">
+              <feTurbulence type="fractalNoise" baseFrequency="0.086" numOctaves="2" seed="41" result="microNoise">
+                <animate attributeName="baseFrequency" dur="8s" values="0.082;0.091;0.085;0.082" repeatCount="indefinite" />
+              </feTurbulence>
+              <feConvolveMatrix in="microNoise" order="3" kernelMatrix="-1 -1 -1 -1 8 -1 -1 -1 -1" bias="0.16" result="microEdges" />
+              <feColorMatrix in="microEdges" type="luminanceToAlpha" result="microAlpha" />
+              <feComponentTransfer in="microAlpha" result="cutMicroEdges">
+                <feFuncA type="table" tableValues="0 0 0.06 0.5 0.72 0.14 0" />
+              </feComponentTransfer>
+              <feGaussianBlur in="cutMicroEdges" stdDeviation="0.22" result="softMicroEdges" />
+              <feFlood floodColor="#b9fbe5" floodOpacity="0.58" result="microColor" />
+              <feComposite in="microColor" in2="softMicroEdges" operator="in" />
+            </filter>
+          </defs>
+          <rect className="caustic-mesh caustic-mesh-primary" x="-12" y="-36" width="240" height="972" filter="url(#fine-caustic)" />
+          <rect className="caustic-mesh caustic-mesh-micro" x="-12" y="-36" width="240" height="972" filter="url(#micro-caustic)" />
+        </svg>
         <div className="water-highlight highlight-one" />
         <div className="water-highlight highlight-two" />
         <div className="bank-stone stone-one" />

@@ -8,9 +8,11 @@ Status: implementation reference, 2026-09-02
 
 ## 当前落地
 
-`src/flow/WebGLFluidBackdrop.ts` 从 MIT 项目的核心 pass 选择性移植出单个 WebGL2 canvas 的低分辨率流体速度场；`display` pass 用速度场推动域扭曲的波面、方向性尾流和 caustic surface。`public/assets/plates/creek-water-v2.png` 是批准视觉稿的无文字干净水面 plate，仅作为低频颜色 / 反光材质，不承担动画。所有动画均在独立 surface layer 上执行，React 文本和操作控件不被 shader 拉伸。
+`src/flow/WebGLFluidBackdrop.ts` 从 MIT 项目的核心 pass 选择性移植出单个 WebGL2 canvas 的低分辨率流体速度场；`display` pass 用速度场推动域扭曲的波面、方向性尾流和 caustic surface。折射与高光采用原尺度 10 倍以上的远景高频采样，避免出现贴近水面的超大网格。`public/assets/plates/creek-water-v2.png` 以两个交叠、羽化的远景切片提供低频颜色 / 反光材质，不承担动画，也不产生可见拼接缝。
 
-`src/App.css` 中的木筏采用不规则 clip-path、底层厚度、绳索和纸张纹理叠层；删除 / 去重时由 wrapper 执行 FLIP，木筏表面只做短暂漂移，避免卡片内容弹跳。
+`src/App.tsx` 还提供一层按 10–14 px 视觉单元构造的 SVG turbulence caustic：湍流场经过边缘提取、阈值切分与轻微柔化，形成不规则细网折射。它既补足远景密度，也作为 WebView2 无法启用浮点纹理扩展时的材质降级路径。所有水面动画均在独立 surface layer 上执行，React 文本和操作控件不被 shader 拉伸。
+
+`src/App.css` 中的木筏采用不规则 clip-path、底层厚度、绳索和纸张纹理叠层；木筏持续进行小幅升沉和横摇，左右舷白沫、船底水环与 WebGL 尾流共同表现贴水关系。删除 / 去重时由 wrapper 执行 FLIP，避免卡片内容弹跳。
 
 ## 取舍
 

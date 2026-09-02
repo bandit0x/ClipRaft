@@ -218,6 +218,13 @@ const displaySource = `#version 300 es
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
 
+  vec2 hash2(vec2 p) {
+    return fract(sin(vec2(
+      dot(p, vec2(127.1, 311.7)),
+      dot(p, vec2(269.5, 183.3))
+    )) * 43758.5453123);
+  }
+
   float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -305,7 +312,7 @@ const displaySource = `#version 300 es
   vec2 flowCoordinates(vec2 uv, float time) {
     vec2 localVelocity = smoothVelocity(uv);
     float center = riverCenter(uv.y, time * 0.7);
-    vec2 p = vec2((uv.x - center) * 6.9 + uv.y * 0.8, uv.y * 11.2);
+    vec2 p = vec2((uv.x - center) * 72.0 + uv.y * 7.6, uv.y * 118.0);
     p += localVelocity * vec2(0.42, -0.32);
     vec2 warp = vec2(
       fbm(p * 0.42 + vec2(-time * 0.08, time * 0.04)),
@@ -315,7 +322,7 @@ const displaySource = `#version 300 es
       fbm(p * 0.38 + vec2(time * 0.13, -time * 0.09)),
       fbm(p * 0.38 + vec2(4.2 - time * 0.1, 1.8 + time * 0.07))
     ) - 0.5;
-    return p + warp * vec2(1.75, 0.94) + microWarp * vec2(0.52, 0.28);
+    return p + warp * vec2(0.86, 0.52) + microWarp * vec2(0.32, 0.18);
   }
 
   float surfaceHeight(vec2 uv, float time) {
@@ -324,34 +331,70 @@ const displaySource = `#version 300 es
     float flowLift = dot(flow, vec2(1.2, -0.8));
     float broad = sin(p.x * 1.35 + p.y * 0.46 - time * 1.15 + sin(p.y * 0.74 - time * 0.5) * 0.72 + flowLift * 0.9);
     float middle = sin(p.x * 3.6 - p.y * 0.83 - time * 1.8 + sin(p.y * 1.2 + p.x * 0.7) * 0.45 + flowLift * 0.55);
+    float fine = sin(p.x * 6.8 + p.y * 2.1 - time * 2.6 + flowLift * 0.32);
     float raftDisplacement = raftRippleField(uv, time);
-    return broad * 0.035 + middle * 0.01 + raftDisplacement * 0.01;
+    return broad * 0.012 + middle * 0.005 + fine * 0.0025 + raftDisplacement * 0.012;
   }
 
   vec2 surfaceCoordinates(vec2 uv, float time) {
-    vec2 p = uv * vec2(6.2, 10.6) + vec2(-time * 0.06, time * 0.1);
+    vec2 p = uv * vec2(68.0, 116.0) + vec2(-time * 0.12, time * 0.2);
     vec2 warp = vec2(
       fbm(uv * vec2(2.2, 2.7) + vec2(-time * 0.04, time * 0.03)),
       fbm(uv * vec2(1.7, 2.4) + vec2(4.8 + time * 0.03, -1.5 - time * 0.04))
     ) - 0.5;
-    return p + warp * vec2(1.65, 1.25) + smoothVelocity(uv) * vec2(1.7, 1.2);
+    return p + warp * vec2(0.82, 0.64) + smoothVelocity(uv) * vec2(1.2, 0.86);
   }
 
   float caustic(vec2 uv, float time) {
     vec2 p = surfaceCoordinates(uv, time);
-    float broadField = fbm(p * vec2(0.76, 0.62) + vec2(2.0, -3.4) + vec2(time * 0.07, -time * 0.045));
-    float fineField = fbm(p * vec2(1.48, 1.2) + vec2(-6.2, 4.7) + vec2(-time * 0.11, time * 0.08));
+    float broadField = fbm(p * vec2(0.94, 0.78) + vec2(2.0, -3.4) + vec2(time * 0.09, -time * 0.06));
+    float fineField = fbm(p * vec2(2.15, 1.76) + vec2(-6.2, 4.7) + vec2(-time * 0.14, time * 0.1));
     float broadRidge = 1.0 - abs(broadField * 2.0 - 1.0);
     float fineRidge = 1.0 - abs(fineField * 2.0 - 1.0);
     float breakup = smoothstep(0.36, 0.76, fbm(p * vec2(0.42, 0.34) + vec2(time * 0.025, -time * 0.02)));
     float broad = smoothstep(0.78, 0.96, broadRidge) * breakup;
-    float fine = smoothstep(0.86, 0.98, fineRidge) * (0.22 + breakup * 0.78);
-    return clamp(broad * 0.4 + fine * 0.22, 0.0, 1.0);
+    float fine = smoothstep(0.82, 0.975, fineRidge) * (0.22 + breakup * 0.78);
+    return clamp(broad * 0.48 + fine * 0.42, 0.0, 1.0);
+  }
+
+  float cellularCaustic(vec2 uv, float time, float cellSize, vec2 phase) {
+    vec2 current = smoothVelocity(uv);
+    vec2 p = uv * u_resolution / cellSize;
+    p += phase + vec2(-time * 0.7, time * 1.08);
+    p += current * vec2(0.62, -0.88);
+    p += vec2(
+      sin(p.y * 0.115 + time * 0.36),
+      sin(p.x * 0.16 - time * 0.28)
+    ) * 0.2;
+
+    vec2 cell = floor(p);
+    vec2 local = fract(p);
+    float nearest = 8.0;
+    float secondNearest = 8.0;
+
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec2 offset = vec2(float(x), float(y));
+        vec2 point = offset + 0.18 + hash2(cell + offset) * 0.64 - local;
+        float distanceSquared = dot(point, point);
+        if (distanceSquared < nearest) {
+          secondNearest = nearest;
+          nearest = distanceSquared;
+        } else if (distanceSquared < secondNearest) {
+          secondNearest = distanceSquared;
+        }
+      }
+    }
+
+    float edgeDistance = sqrt(secondNearest) - sqrt(nearest);
+    float line = 1.0 - smoothstep(0.035, 0.14, edgeDistance);
+    float glint = smoothstep(0.52, 0.9, hash(cell + floor(local * 2.0)));
+    return line * (0.64 + glint * 0.36);
   }
 
   float waterRibbons(vec2 uv, float time) {
     vec2 p = surfaceCoordinates(uv, time) + vec2(-time * 0.08, time * 0.06);
-    float field = fbm(p * vec2(1.15, 0.92) + vec2(-time * 0.12, time * 0.08));
+    float field = fbm(p * vec2(1.72, 1.38) + vec2(-time * 0.16, time * 0.1));
     float breakup = fbm(p * vec2(0.58, 0.48) + vec2(2.8 + time * 0.03, -4.1 - time * 0.025));
     float ridge = 1.0 - abs(field * 2.0 - 1.0);
     return smoothstep(0.9, 0.99, ridge) * smoothstep(0.42, 0.76, breakup);
@@ -359,7 +402,7 @@ const displaySource = `#version 300 es
 
   float surfaceSparkle(vec2 uv, float time) {
     vec2 p = surfaceCoordinates(uv, time);
-    vec2 q = p * vec2(1.45, 1.12) + vec2(-time * 0.18, time * 0.11);
+    vec2 q = p * vec2(2.25, 1.78) + vec2(-time * 0.22, time * 0.14);
     float field = fbm(q + vec2(1.8, -5.4));
     float breakup = fbm(p * vec2(0.68, 0.5) + vec2(3.2 + time * 0.035, -1.7 - time * 0.025));
     float ridge = 1.0 - abs(field * 2.0 - 1.0);
@@ -368,9 +411,9 @@ const displaySource = `#version 300 es
 
   float raftFoam(vec2 uv, vec3 raft, float time) {
     vec2 delta = (uv - raft.xy) * u_resolution;
-    float bow = exp(-length(delta / vec2(15.0, 9.0))) * 0.7;
-    float hullRadius = length(delta / vec2(36.0, 50.0));
-    float hullRipple = exp(-pow(abs(hullRadius - 1.0) * 5.0, 2.0)) * 0.34;
+    float bow = exp(-length(delta / vec2(20.0, 11.0))) * 0.92;
+    float hullRadius = length(delta / vec2(48.0, 63.0));
+    float hullRipple = exp(-pow(abs(hullRadius - 1.0) * 5.0, 2.0)) * 0.56;
     float downstream = max(-delta.y, 0.0);
     float veeDistance = 8.0 + downstream * 0.13;
     float veeWidth = 2.1 + downstream * 0.012;
@@ -380,7 +423,7 @@ const displaySource = `#version 300 es
     float breakup = 0.46 + 0.54 * fbm(vec2(delta.x * 0.028 + time * 0.06, downstream * 0.02 - time * 0.09));
     float wakeWave = 0.42 + 0.58 * sin(downstream * 0.18 - time * 1.75 + sin(delta.x * 0.04) * 0.8);
     float wake = (veeWake * 0.9 + centerWake * 0.24) * (0.42 + 0.58 * wakeWave) * breakup;
-    return clamp((bow + hullRipple + wake * 0.82) * raft.z, 0.0, 1.0);
+    return clamp((bow + hullRipple + wake) * raft.z, 0.0, 1.0);
   }
 
   float raftFoamField(vec2 uv, float time) {
@@ -404,21 +447,23 @@ const displaySource = `#version 300 es
     float height = surfaceHeight(uv, time);
     float height_x = surfaceHeight(uv + vec2(texel.x, 0.0), time);
     float height_y = surfaceHeight(uv + vec2(0.0, texel.y), time);
-    vec3 normal = normalize(vec3((height - height_x) * 28.0, (height - height_y) * 28.0, 1.0));
+    vec3 normal = normalize(vec3((height - height_x) * 39.0, (height - height_y) * 39.0, 1.0));
     vec3 light_direction = normalize(vec3(-0.35, 0.88, 1.4));
-    float specular = pow(max(dot(reflect(-light_direction, normal), vec3(0.0, 0.0, 1.0)), 0.0), 18.0) * 0.62;
+    float specular = pow(max(dot(reflect(-light_direction, normal), vec3(0.0, 0.0, 1.0)), 0.0), 25.0) * 0.82;
     float ripple = raftRippleField(uv, time);
     float waveRing = raftWaveRingField(uv, time);
     float foam = raftFoamField(uv, time);
     float ribbons = waterRibbons(uv, time);
     float sparkle = surfaceSparkle(uv, time);
     float causticLight = caustic(uv + vec2(ripple * 0.018, ripple * 0.008), time);
+    float fineMesh = cellularCaustic(uv + vec2(ripple * 0.006, 0.0), time, 13.0, vec2(0.0));
+    float microMesh = cellularCaustic(uv, time * 1.14, 8.5, vec2(17.3, -9.6));
 
-    float movingLight = clamp(causticLight * 0.42 + specular * 0.58 + ribbons * 0.24 + sparkle * 0.12, 0.0, 1.0);
-    float interaction = clamp(foam * 1.5 + waveRing * 1.3 + ripple * 0.28, 0.0, 1.0);
-    float effectAlpha = edge * (movingLight * 0.12 + interaction * 0.78);
-    vec3 effectColor = mix(vec3(0.3, 0.78, 0.66), vec3(0.76, 1.0, 0.87), interaction);
-    out_color = vec4(effectColor, clamp(effectAlpha, 0.0, 0.72));
+    float movingLight = clamp(causticLight * 0.32 + fineMesh * 0.62 + microMesh * 0.22 + specular * 0.52 + ribbons * 0.2 + sparkle * 0.18, 0.0, 1.0);
+    float interaction = clamp(foam * 1.72 + waveRing * 1.46 + ripple * 0.38, 0.0, 1.0);
+    float effectAlpha = edge * (movingLight * 0.43 + interaction * 0.9);
+    vec3 effectColor = mix(vec3(0.34, 0.82, 0.71), vec3(0.82, 1.0, 0.91), interaction);
+    out_color = vec4(effectColor, clamp(effectAlpha, 0.0, 0.82));
   }
 `;
 
