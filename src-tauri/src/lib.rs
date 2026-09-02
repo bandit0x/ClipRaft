@@ -321,6 +321,16 @@ impl SqliteStore {
             .map_err(|error| error.to_string())
     }
 
+    fn restore_deleted(&mut self, id: &str) -> Result<(), String> {
+        self.connection
+            .execute(
+                "UPDATE clips SET deleted_at = NULL WHERE id = ?1",
+                params![id],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
     fn clear(&mut self) -> Result<(), String> {
         self.connection
             .execute("DELETE FROM clips", [])
@@ -430,6 +440,35 @@ fn text_capture(text: &str) -> ClipboardCapture {
     }
 }
 
+fn file_capture(paths: Vec<String>) -> Option<ClipboardCapture> {
+    let paths = paths
+        .into_iter()
+        .filter(|path| !path.trim().is_empty())
+        .collect::<Vec<_>>();
+    if paths.is_empty() {
+        return None;
+    }
+    let first_name = Path::new(&paths[0])
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&paths[0]);
+    let hash_input = serde_json::to_vec(&paths).ok()?;
+    let hash = digest_bytes("files\0", &hash_input);
+    Some(ClipboardCapture {
+        card: ClipCard {
+            id: card_id(&hash),
+            kind: "file".to_string(),
+            preview: first_name.to_string(),
+            detail: format!("文件 · {} 个", paths.len()),
+            copied_at: now_label(),
+            use_count: 1,
+            pinned: false,
+        },
+        hash,
+        representations: vec![CapturedRepresentation::Files(paths)],
+    })
+}
+
 fn capture_clipboard(reader: &ClipboardContext) -> Option<ClipboardCapture> {
     let files = reader
         .get_files()
@@ -465,32 +504,15 @@ fn capture_clipboard(reader: &ClipboardContext) -> Option<ClipboardCapture> {
     let copied_at = now_label();
 
     if let Some(paths) = files {
-        let first_name = Path::new(&paths[0])
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or(&paths[0]);
-        let hash_input = serde_json::to_vec(&paths).ok()?;
-        let hash = digest_bytes("files\0", &hash_input);
-        let mut representations = vec![CapturedRepresentation::Files(paths.clone())];
+        let mut capture = file_capture(paths)?;
         if let Some(value) = text {
-            representations.push(CapturedRepresentation::Text {
+            capture.representations.push(CapturedRepresentation::Text {
                 format: "text/plain".to_string(),
                 value,
             });
         }
-        return Some(ClipboardCapture {
-            card: ClipCard {
-                id: card_id(&hash),
-                kind: "file".to_string(),
-                preview: first_name.to_string(),
-                detail: format!("文件 · {} 个", paths.len()),
-                copied_at,
-                use_count: 1,
-                pinned: false,
-            },
-            hash,
-            representations,
-        });
+        capture.card.copied_at = copied_at;
+        return Some(capture);
     }
 
     if let Some((width, height, bytes)) = image {
@@ -631,6 +653,25 @@ fn delete_clip(id: String, state: State<'_, AppState>) -> Result<(), String> {
         .soft_delete(&id)
 }
 
+#[tauri::command]
+fn undo_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .store
+        .lock()
+        .map_err(|_| "history lock poisoned".to_string())?
+        .restore_deleted(&id)
+}
+
+#[tauri::command]
+fn ingest_paths(paths: Vec<String>, state: State<'_, AppState>) -> Result<ClipCard, String> {
+    let capture = file_capture(paths).ok_or_else(|| "拖入的文件列表为空".to_string())?;
+    state
+        .store
+        .lock()
+        .map_err(|_| "history lock poisoned".to_string())?
+        .upsert(capture)
+}
+
 fn contents_from_payload(
     payload: RestorePayload,
 ) -> Result<(String, Vec<ClipboardContent>), String> {
@@ -730,6 +771,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             history_list,
             delete_clip,
+            undo_delete,
+            ingest_paths,
             restore_clip,
             clear_history
         ])
@@ -786,5 +829,36 @@ mod tests {
             .representations
             .iter()
             .any(|item| item.format == "text/html"));
+    }
+
+    #[test]
+    fn soft_deleted_raft_can_be_restored() {
+        let state = AppState::in_memory();
+        let card = ingest_text(&state, "undo me".to_string()).expect("capture");
+        {
+            let mut store = state.store.lock().expect("store lock");
+            store.soft_delete(&card.id).expect("soft delete");
+            assert!(store.list().expect("list after delete").is_empty());
+            store.restore_deleted(&card.id).expect("restore delete");
+        }
+        assert_eq!(
+            state
+                .store
+                .lock()
+                .expect("store lock")
+                .list()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn file_capture_discards_empty_paths_and_keeps_all_files() {
+        let capture = file_capture(vec!["".to_string(), "C:\\Temp\\a.txt".to_string()])
+            .expect("file capture");
+        assert_eq!(capture.card.kind, "file");
+        assert_eq!(capture.card.detail, "文件 · 1 个");
+        assert_eq!(capture.representations.len(), 1);
     }
 }

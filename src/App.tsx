@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { MutableRefObject } from "react";
+import type { DragEvent, MutableRefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import { mountFluidSurface, type FluidRaft } from "./flow/WebGLFluidBackdrop";
@@ -32,6 +33,7 @@ const iconPaths: Record<string, string> = {
   file: "M7 3h7l4 4v14H7zM14 3v5h5M10 12h5M10 16h5",
   restore: "M4 12a8 8 0 1 0 2.34-5.66L4 8.7M4 4v4.7h4.7",
   close: "M6 6l12 12M18 6 6 18",
+  trash: "M5 7h14m-9 0v10m4-10v10M9 4h6l1 3H8l1-3Zm-4 3 1 14h12l1-14",
 };
 
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -98,18 +100,25 @@ function useRaftMotion(cards: ClipCard[], refs: MutableRefObject<Map<string, HTM
   }, [cards, refs]);
 }
 
-function RaftCard({ card, index, removing, onDelete, onRestore, setRef }: {
+function RaftCard({ card, index, removing, onDelete, onRestore, onDragStart, onDragEnd, setRef }: {
   card: ClipCard;
   index: number;
   removing: boolean;
   onDelete: (id: string) => void;
   onRestore: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
   setRef: (element: HTMLDivElement | null) => void;
 }) {
   return (
     <div className="raft-motion" ref={setRef}>
       <div className={`raft-wake wake-${index % 3}`} aria-hidden="true"><span /><span /><span /></div>
-      <article className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${removing ? "is-removing" : ""}`}>
+      <article
+        className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${removing ? "is-removing" : ""}`}
+        draggable={!removing}
+        onDragStart={() => onDragStart(card.id)}
+        onDragEnd={onDragEnd}
+      >
         <div className="raft-rope rope-top" />
         <div className="raft-rope rope-bottom" />
         <div className="raft-rails" aria-hidden="true" />
@@ -138,6 +147,10 @@ function App() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("复制内容会在这里顺流靠岸");
   const [autoPaste, setAutoPaste] = useState(true);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingOverTrash, setDraggingOverTrash] = useState(false);
+  const [undoableId, setUndoableId] = useState<string | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
   const refs = useRef(new Map<string, HTMLDivElement>());
   const worldRef = useRef<HTMLDivElement>(null);
   const [raftAnchors, setRaftAnchors] = useState<FluidRaft[]>([]);
@@ -152,13 +165,36 @@ function App() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     refresh();
     let unlisten: (() => void) | undefined;
+    let unlistenDrop: (() => void) | undefined;
     void listen<ClipCard>("clipboard://updated", (event) => {
       setCards((current) => [event.payload, ...current.filter((card) => card.id !== event.payload.id)].slice(0, 200));
       setNotice("新木筏已顺流靠岸");
     }).then((cleanup) => { unlisten = cleanup; }).catch(() => undefined);
-    return () => unlisten?.();
+    void getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "enter") {
+        setNotice("把文件放到水面上，让它靠岸");
+        return;
+      }
+      if (event.payload.type !== "drop") return;
+      const filePaths = event.payload.paths.filter((path) => path.trim().length > 0);
+      if (!filePaths.length) return;
+      setNotice("文件正在水面靠岸…");
+      void invoke<ClipCard>("ingest_paths", { paths: filePaths })
+        .then((card) => {
+          setCards((current) => [card, ...current.filter((item) => item.id !== card.id)].slice(0, 200));
+          setNotice("文件木筏已靠岸");
+        })
+        .catch(() => setNotice("文件没有成功靠岸"));
+    }).then((cleanup) => { unlistenDrop = cleanup; }).catch(() => undefined);
+    return () => { unlisten?.(); unlistenDrop?.(); };
   }, [refresh]);
 
   useRaftMotion(cards, refs);
@@ -186,17 +222,52 @@ function App() {
 
   const deleteCard = async (id: string) => {
     setRemovingId(id);
+    setDraggingId(null);
+    setDraggingOverTrash(false);
     window.setTimeout(async () => {
       setCards((current) => current.filter((card) => card.id !== id));
       setRemovingId(null);
       try { await invoke("delete_clip", { id }); } catch { /* browser preview */ }
+      setUndoableId(id);
+      if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = window.setTimeout(() => setUndoableId(null), 5000);
       setNotice("木筏已离岸，下面的卡片正在向上游补位");
     }, 170);
+  };
+
+  const undoDelete = async () => {
+    if (!undoableId) return;
+    const id = undoableId;
+    setUndoableId(null);
+    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    try {
+      await invoke("undo_delete", { id });
+      await refresh();
+      setNotice("木筏已回到水面");
+    } catch {
+      setNotice("撤销失败，木筏仍在下游");
+    }
   };
 
   const restoreCard = async (id: string) => {
     try { await invoke("restore_clip", { id }); } catch { /* browser preview */ }
     setNotice("内容已复制到系统剪贴板");
+  };
+
+  const handleDragStart = (id: string) => {
+    setDraggingId(id);
+    setDraggingOverTrash(false);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingId(null);
+    setDraggingOverTrash(false);
+  };
+
+  const handleTrashDrop = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (draggingId) void deleteCard(draggingId);
   };
 
   return (
@@ -218,9 +289,17 @@ function App() {
 
         <section className="history-stream" aria-live="polite">
           {visibleCards.length ? visibleCards.map((card, index) => (
-            <RaftCard key={card.id} card={card} index={index} removing={removingId === card.id} onDelete={deleteCard} onRestore={restoreCard} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
+            <RaftCard key={card.id} card={card} index={index} removing={removingId === card.id} onDelete={deleteCard} onRestore={restoreCard} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
           )) : <div className="empty-water">水面很安静<br /><span>复制一点内容，让木筏靠岸</span></div>}
         </section>
+
+        {draggingId && <button
+          className={`trash-bay ${draggingOverTrash ? "is-hovered" : ""}`}
+          onDragOver={(event) => { event.preventDefault(); setDraggingOverTrash(true); }}
+          onDragLeave={() => setDraggingOverTrash(false)}
+          onDrop={handleTrashDrop}
+          aria-label="拖到这里删除卡片"
+        ><Icon name="trash" size={18} /><span>{draggingOverTrash ? "松开删除" : "拖到这里删除"}</span></button>}
 
         <div className="detached-dock">
           <button aria-label="筛选卡片" onClick={() => setNotice("筛选功能将在下一条纵切片接入")}><Icon name="search" /></button>
@@ -230,6 +309,7 @@ function App() {
         <div className="status-strip">
           <span className="status-dot" />
           <span>{notice}</span>
+          {undoableId && <button className="undo-action" onClick={() => void undoDelete()}>撤销</button>}
           <button className={`auto-paste ${autoPaste ? "is-on" : ""}`} onClick={() => { setAutoPaste((value) => !value); setNotice("自动粘贴将在下一阶段接入"); }}>{autoPaste ? "自动粘贴" : "仅复制"}</button>
         </div>
       </div>

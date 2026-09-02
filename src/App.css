@@ -41,7 +41,8 @@ button { border: 0; cursor: pointer; }
 .raft-wake span { position: absolute; top: 73%; left: 50%; width: 72px; height: 18px; border: 1px solid rgba(202, 245, 217, .5); border-radius: 50%; opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); filter: blur(.35px); mix-blend-mode: screen; animation: raft-ripple 4.8s cubic-bezier(.2, .8, .25, 1) infinite; }
 .raft-wake span:nth-child(2) { animation-delay: -1.6s; }
 .raft-wake span:nth-child(3) { animation-delay: -3.2s; }
-.raft-card { position: relative; z-index: 1; isolation: isolate; width: 86px; min-height: 108px; margin: 0 auto; padding: 14px 6px 7px; color: #493326; background: radial-gradient(ellipse at 22% 17%, rgba(247, 185, 104, .42) 0 2px, transparent 3px), radial-gradient(ellipse at 75% 74%, rgba(57, 29, 17, .3) 0 2px, transparent 3px), linear-gradient(103deg, #60402a 0 10%, #aa713f 10% 22%, #7d4c2d 22% 31%, #c28a4e 31% 49%, #80502d 49% 60%, #bc7f44 60% 79%, #70432a 79% 90%, #b77a40 90%); clip-path: polygon(8% 2%, 26% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); filter: drop-shadow(0 12px 8px rgba(2, 45, 50, .32)); transition: filter .35s ease, transform .35s ease; }
+.raft-card { position: relative; z-index: 1; isolation: isolate; width: 86px; min-height: 108px; margin: 0 auto; padding: 14px 6px 7px; color: #493326; background: radial-gradient(ellipse at 22% 17%, rgba(247, 185, 104, .42) 0 2px, transparent 3px), radial-gradient(ellipse at 75% 74%, rgba(57, 29, 17, .3) 0 2px, transparent 3px), linear-gradient(103deg, #60402a 0 10%, #aa713f 10% 22%, #7d4c2d 22% 31%, #c28a4e 31% 49%, #80502d 49% 60%, #bc7f44 60% 79%, #70432a 79% 90%, #b77a40 90%); clip-path: polygon(8% 2%, 26% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); filter: drop-shadow(0 12px 8px rgba(2, 45, 50, .32)); cursor: grab; transition: filter .35s ease, transform .35s ease; }
+.raft-card:active { cursor: grabbing; }
 .raft-card::before { position: absolute; z-index: -2; content: ""; inset: 8px -3px -7px 4px; background: linear-gradient(100deg, #493020, #86512d 29%, #5d3825 55%, #9b6337 74%, #4a2c20); clip-path: polygon(8% 2%, 27% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); opacity: .8; }
 .raft-card::after { position: absolute; z-index: -1; content: ""; inset: 5px; background: repeating-linear-gradient(92deg, transparent 0 13px, rgba(57, 29, 16, .16) 13px 14px, transparent 14px 28px); border: 1px solid rgba(255, 211, 139, .3); clip-path: polygon(8% 2%, 27% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); box-shadow: inset 0 0 12px rgba(255, 190, 104, .15), inset 0 -13px 0 rgba(45, 24, 16, .2); opacity: .9; }
 .raft-card:hover { filter: brightness(1.09) drop-shadow(0 18px 11px rgba(2, 45, 50, .32)); }
@@ -77,6 +78,10 @@ button { border: 0; cursor: pointer; }
 .empty-water { padding: 42px 15px; color: rgba(240,255,246,.84); text-align: center; font-family: Georgia, serif; font-size: 15px; line-height: 1.75; }
 .empty-water span { font-family: "Segoe UI", sans-serif; font-size: 10px; opacity: .78; }
 
+.trash-bay { position: absolute; z-index: 6; right: 50%; bottom: 94px; display: grid; justify-items: center; gap: 2px; width: 102px; padding: 8px 10px 7px; color: #fff4db; background: rgba(75, 48, 31, .8); border: 1px solid rgba(251, 211, 155, .44); border-radius: 18px 13px 20px 12px; box-shadow: 0 7px 18px rgba(2, 37, 40, .32), inset 0 1px 0 rgba(255,255,255,.18); transform: translateX(50%); backdrop-filter: blur(8px); transition: background .22s ease, transform .22s ease, box-shadow .22s ease; pointer-events: auto; }
+.trash-bay span { font-size: 9px; }
+.trash-bay.is-hovered { background: rgba(145, 66, 45, .92); box-shadow: 0 9px 20px rgba(79, 28, 24, .42), 0 0 0 4px rgba(245, 180, 115, .15); transform: translateX(50%) translateY(-3px) scale(1.04); }
+
 .detached-dock { position: absolute; z-index: 4; right: 30px; bottom: 55px; display: flex; gap: 3px; padding: 6px 6px 7px; background: linear-gradient(100deg, #694027, #b1783f 35%, #7a4a2c 70%, #a66d3b); clip-path: polygon(7% 9%, 25% 0, 51% 5%, 76% 1%, 96% 10%, 100% 77%, 83% 96%, 57% 92%, 31% 100%, 5% 89%, 0 25%); filter: drop-shadow(4px 8px 4px rgba(35, 26, 21, .35)); pointer-events: auto; }
 .detached-dock::after { position: absolute; content: ""; inset: 4px; border: 1px solid rgba(248,190,110,.36); clip-path: inherit; pointer-events: none; }
 .detached-dock button { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; color: #5d422d; background: linear-gradient(145deg, #f6d9a4, #c5955b); border: 1px solid #845a32; border-radius: 9px 6px 8px 7px; box-shadow: 0 2px 0 rgba(74,44,25,.35), inset 1px 1px 2px rgba(255,255,255,.48); }
@@ -85,10 +90,11 @@ button { border: 0; cursor: pointer; }
 .status-strip { position: absolute; z-index: 4; right: 11px; bottom: 16px; left: 11px; display: flex; align-items: center; gap: 5px; color: rgba(245,255,248,.9); font-size: 8px; pointer-events: auto; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #c5f79f; box-shadow: 0 0 8px #c5f79f; }
 .status-strip > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-action { flex: 0 0 auto; padding: 3px 5px; color: #fff6df; background: rgba(129, 82, 41, .8); border-radius: 7px; font-size: 8px; }
 .auto-paste { padding: 3px 5px; color: rgba(245,255,248,.8); background: rgba(28,91,95,.52); border-radius: 7px; font-size: 8px; }
 .auto-paste.is-on { color: #f4ffd7; background: rgba(47,126,109,.76); }
 .icon { flex: 0 0 auto; }
-.raft-content:focus-visible, .raft-actions button:focus-visible, .detached-dock button:focus-visible, .auto-paste:focus-visible { outline: 2px solid #f4ffd7; outline-offset: 3px; }
+.raft-content:focus-visible, .raft-actions button:focus-visible, .trash-bay:focus-visible, .detached-dock button:focus-visible, .undo-action:focus-visible, .auto-paste:focus-visible { outline: 2px solid #f4ffd7; outline-offset: 3px; }
 
 @keyframes water-glide { 0%, 100% { opacity: .18; transform: translateX(-8px) rotate(-18deg) scale(.86); } 50% { opacity: .62; transform: translateX(17px) rotate(-12deg) scale(1.08); } }
 @keyframes wake-drift { 0%, 100% { opacity: .28; transform: translateX(-50%) translateY(0) scaleX(.78); } 50% { opacity: .64; transform: translateX(-50%) translateY(8px) scaleX(1.04); } }
