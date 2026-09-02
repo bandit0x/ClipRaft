@@ -13,6 +13,8 @@ use clipboard_rs::{
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
@@ -748,6 +750,45 @@ fn dock_window(window: &WebviewWindow) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let show_item = MenuItem::with_id(app, "show", "打开 ClipRaft", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出 ClipRaft", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or("ClipRaft tray icon unavailable")?;
+
+    TrayIconBuilder::new()
+        .icon(icon)
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("ClipRaft")
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => expand_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                if let Some(window) = tray.app_handle().get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        expand_window(tray.app_handle());
+                    }
+                }
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
 fn start_clipboard_watcher(app: AppHandle) {
     thread::Builder::new()
         .name("clipraft-clipboard-watcher".to_string())
@@ -891,6 +932,7 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 dock_window(&window)?;
             }
+            setup_tray(app)?;
             start_clipboard_watcher(app.handle().clone());
             Ok(())
         })
