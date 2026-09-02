@@ -147,6 +147,7 @@ function App() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("复制内容会在这里顺流靠岸");
   const [autoPaste, setAutoPaste] = useState(true);
+  const [historyPersistence, setHistoryPersistence] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingOverTrash, setDraggingOverTrash] = useState(false);
   const [undoableId, setUndoableId] = useState<string | null>(null);
@@ -162,6 +163,12 @@ function App() {
     } catch {
       // Browser preview intentionally keeps the visual comp usable without Tauri.
     }
+  }, []);
+
+  useEffect(() => {
+    void invoke<boolean>("get_history_persistence")
+      .then(setHistoryPersistence)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -254,6 +261,18 @@ function App() {
     setNotice("内容已复制到系统剪贴板");
   };
 
+  const toggleHistoryPersistence = async () => {
+    const next = !historyPersistence;
+    try {
+      await invoke("set_history_persistence", { enabled: next });
+      setHistoryPersistence(next);
+      await refresh();
+      setNotice(next ? "历史保留已开启" : "仅保留本次会话内容");
+    } catch {
+      setNotice("历史保留设置未能更新");
+    }
+  };
+
   const handleDragStart = (id: string) => {
     setDraggingId(id);
     setDraggingOverTrash(false);
@@ -304,7 +323,7 @@ function App() {
         <div className="detached-dock">
           <button aria-label="筛选卡片" onClick={() => setNotice("筛选功能将在下一条纵切片接入")}><Icon name="search" /></button>
           <button aria-label="固定卡片" onClick={() => setNotice("选中木筏后可固定")}><Icon name="pin" /></button>
-          <button aria-label="设置" onClick={() => setNotice("设置码头正在准备")}><Icon name="settings" /></button>
+          <button aria-label={historyPersistence ? "关闭跨重启历史保留" : "开启跨重启历史保留"} title={historyPersistence ? "关闭历史保留" : "开启历史保留"} onClick={() => void toggleHistoryPersistence()}><Icon name="settings" /></button>
         </div>
         <div className="status-strip">
           <span className="status-dot" />

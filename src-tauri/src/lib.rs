@@ -13,7 +13,7 @@ use clipboard_rs::{
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
 const MAX_CARDS: i64 = 200;
@@ -66,6 +66,9 @@ struct SqliteStore {
 
 pub struct AppState {
     store: Mutex<SqliteStore>,
+    session_store: Mutex<SqliteStore>,
+    persistence_enabled: Mutex<bool>,
+    session_resource_dir: Option<PathBuf>,
     ignored_hashes: Mutex<HashMap<String, Instant>>,
 }
 
@@ -76,8 +79,18 @@ impl AppState {
         fs::create_dir_all(&resource_dir).map_err(|error| error.to_string())?;
         let database_path = data_dir.join("clipraft.sqlite3");
         let store = SqliteStore::open(&database_path, resource_dir)?;
+        let persistence_enabled = store.bool_setting("history_persistence", true)?;
+        let session_resource_dir = std::env::temp_dir().join(format!(
+            "clipraft-session-{}-{}",
+            std::process::id(),
+            unix_seconds()
+        ));
+        let session_store = SqliteStore::in_memory_with_resources(session_resource_dir.clone())?;
         Ok(Self {
             store: Mutex::new(store),
+            session_store: Mutex::new(session_store),
+            persistence_enabled: Mutex::new(persistence_enabled),
+            session_resource_dir: Some(session_resource_dir),
             ignored_hashes: Mutex::new(HashMap::new()),
         })
     }
@@ -86,7 +99,67 @@ impl AppState {
     fn in_memory() -> Self {
         Self {
             store: Mutex::new(SqliteStore::in_memory()),
+            session_store: Mutex::new(SqliteStore::in_memory()),
+            persistence_enabled: Mutex::new(true),
+            session_resource_dir: None,
             ignored_hashes: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn with_active_store<T>(
+        &self,
+        operation: impl FnOnce(&mut SqliteStore) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let persistence_enabled = *self
+            .persistence_enabled
+            .lock()
+            .map_err(|_| "persistence setting lock poisoned".to_string())?;
+        if persistence_enabled {
+            let mut store = self
+                .store
+                .lock()
+                .map_err(|_| "history lock poisoned".to_string())?;
+            operation(&mut store)
+        } else {
+            let mut store = self
+                .session_store
+                .lock()
+                .map_err(|_| "session history lock poisoned".to_string())?;
+            operation(&mut store)
+        }
+    }
+
+    fn history_persistence(&self) -> Result<bool, String> {
+        self.persistence_enabled
+            .lock()
+            .map(|value| *value)
+            .map_err(|_| "persistence setting lock poisoned".to_string())
+    }
+
+    fn set_history_persistence(&self, enabled: bool) -> Result<(), String> {
+        let mut persistence_enabled = self
+            .persistence_enabled
+            .lock()
+            .map_err(|_| "persistence setting lock poisoned".to_string())?;
+        self.store
+            .lock()
+            .map_err(|_| "history lock poisoned".to_string())?
+            .set_bool_setting("history_persistence", enabled)?;
+        if !enabled {
+            self.session_store
+                .lock()
+                .map_err(|_| "session history lock poisoned".to_string())?
+                .clear()?;
+        }
+        *persistence_enabled = enabled;
+        Ok(())
+    }
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        if let Some(session_resource_dir) = &self.session_resource_dir {
+            let _ = fs::remove_dir_all(session_resource_dir);
         }
     }
 }
@@ -94,6 +167,17 @@ impl AppState {
 impl SqliteStore {
     fn open(database_path: &Path, resource_dir: PathBuf) -> Result<Self, String> {
         let connection = Connection::open(database_path).map_err(|error| error.to_string())?;
+        let mut store = Self {
+            connection,
+            resource_dir,
+        };
+        store.initialize()?;
+        Ok(store)
+    }
+
+    fn in_memory_with_resources(resource_dir: PathBuf) -> Result<Self, String> {
+        fs::create_dir_all(&resource_dir).map_err(|error| error.to_string())?;
+        let connection = Connection::open_in_memory().map_err(|error| error.to_string())?;
         let mut store = Self {
             connection,
             resource_dir,
@@ -138,8 +222,41 @@ impl SqliteStore {
                    PRIMARY KEY (clip_id, format)
                  );
                  CREATE INDEX IF NOT EXISTS idx_clips_stream
-                   ON clips (deleted_at, order_index DESC);",
+                   ON clips (deleted_at, order_index DESC);
+                 CREATE TABLE IF NOT EXISTS settings (
+                   key TEXT PRIMARY KEY,
+                   value TEXT NOT NULL
+                 );
+                 INSERT OR IGNORE INTO settings (key, value)
+                   VALUES ('history_persistence', 'true');",
             )
+            .map_err(|error| error.to_string())
+    }
+
+    fn bool_setting(&self, key: &str, fallback: bool) -> Result<bool, String> {
+        let value = self
+            .connection
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        Ok(value
+            .as_deref()
+            .map(|value| value == "true")
+            .unwrap_or(fallback))
+    }
+
+    fn set_bool_setting(&mut self, key: &str, value: bool) -> Result<(), String> {
+        self.connection
+            .execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, if value { "true" } else { "false" }],
+            )
+            .map(|_| ())
             .map_err(|error| error.to_string())
     }
 
@@ -579,8 +696,7 @@ fn ingest_capture(state: &AppState, capture: ClipboardCapture) -> Option<ClipCar
     if consume_ignored_hash(state, &capture.hash) {
         return None;
     }
-    let mut store = state.store.lock().ok()?;
-    store.upsert(capture).ok()
+    state.with_active_store(|store| store.upsert(capture)).ok()
 }
 
 #[cfg(test)]
@@ -606,9 +722,30 @@ impl ClipboardHandler for ClipboardChangeHandler {
             return;
         };
         if let Some(card) = ingest_capture(&state, capture) {
+            expand_window(&self.app);
             let _ = self.app.emit(CLIPBOARD_UPDATED, card);
         }
     }
+}
+
+fn expand_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+    }
+}
+
+fn dock_window(window: &WebviewWindow) -> Result<(), String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "ClipRaft monitor unavailable".to_string())?;
+    let window_size = window.outer_size().map_err(|error| error.to_string())?;
+    let x = monitor.position().x + monitor.size().width as i32 - window_size.width as i32;
+    let y = monitor.position().y;
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|error| error.to_string())
 }
 
 fn start_clipboard_watcher(app: AppHandle) {
@@ -637,39 +774,23 @@ fn start_clipboard_watcher(app: AppHandle) {
 
 #[tauri::command]
 fn history_list(state: State<'_, AppState>) -> Result<Vec<ClipCard>, String> {
-    state
-        .store
-        .lock()
-        .map_err(|_| "history lock poisoned".to_string())?
-        .list()
+    state.with_active_store(|store| store.list())
 }
 
 #[tauri::command]
 fn delete_clip(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .store
-        .lock()
-        .map_err(|_| "history lock poisoned".to_string())?
-        .soft_delete(&id)
+    state.with_active_store(|store| store.soft_delete(&id))
 }
 
 #[tauri::command]
 fn undo_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .store
-        .lock()
-        .map_err(|_| "history lock poisoned".to_string())?
-        .restore_deleted(&id)
+    state.with_active_store(|store| store.restore_deleted(&id))
 }
 
 #[tauri::command]
 fn ingest_paths(paths: Vec<String>, state: State<'_, AppState>) -> Result<ClipCard, String> {
     let capture = file_capture(paths).ok_or_else(|| "拖入的文件列表为空".to_string())?;
-    state
-        .store
-        .lock()
-        .map_err(|_| "history lock poisoned".to_string())?
-        .upsert(capture)
+    state.with_active_store(|store| store.upsert(capture))
 }
 
 fn contents_from_payload(
@@ -723,11 +844,7 @@ fn contents_from_payload(
 
 #[tauri::command]
 fn restore_clip(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let payload = state
-        .store
-        .lock()
-        .map_err(|_| "history lock poisoned".to_string())?
-        .payload_by_id(&id)?;
+    let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
     let (hash, contents) = contents_from_payload(payload)?;
     {
         let mut ignored = state
@@ -748,11 +865,17 @@ fn restore_clip(id: String, state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .store
-        .lock()
-        .map_err(|_| "history lock poisoned".to_string())?
-        .clear()
+    state.with_active_store(|store| store.clear())
+}
+
+#[tauri::command]
+fn get_history_persistence(state: State<'_, AppState>) -> Result<bool, String> {
+    state.history_persistence()
+}
+
+#[tauri::command]
+fn set_history_persistence(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    state.set_history_persistence(enabled)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -765,6 +888,9 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|error| format!("ClipRaft data directory failed: {error}"))?;
             app.manage(AppState::open(&data_dir)?);
+            if let Some(window) = app.get_webview_window("main") {
+                dock_window(&window)?;
+            }
             start_clipboard_watcher(app.handle().clone());
             Ok(())
         })
@@ -774,7 +900,9 @@ pub fn run() {
             undo_delete,
             ingest_paths,
             restore_clip,
-            clear_history
+            clear_history,
+            get_history_persistence,
+            set_history_persistence
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipRaft");
@@ -860,5 +988,28 @@ mod tests {
         assert_eq!(capture.card.kind, "file");
         assert_eq!(capture.card.detail, "文件 · 1 个");
         assert_eq!(capture.representations.len(), 1);
+    }
+
+    #[test]
+    fn disabling_persistence_keeps_session_history_out_of_persistent_history() {
+        let state = AppState::in_memory();
+        let persistent =
+            ingest_text(&state, "keep after restart".to_string()).expect("persistent capture");
+        state
+            .set_history_persistence(false)
+            .expect("disable persistence");
+        assert!(state
+            .with_active_store(|store| store.list())
+            .unwrap()
+            .is_empty());
+        let session =
+            ingest_text(&state, "only this session".to_string()).expect("session capture");
+        assert_ne!(persistent.id, session.id);
+        state
+            .set_history_persistence(true)
+            .expect("enable persistence");
+        let cards = state.with_active_store(|store| store.list()).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].id, persistent.id);
     }
 }

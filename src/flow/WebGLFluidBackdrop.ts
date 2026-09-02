@@ -210,8 +210,8 @@ const displaySource = `#version 300 es
     vec2 delta = (uv - raft.xy) * u_resolution;
     delta.x *= 1.08;
     float radius = length(delta / vec2(1.0, 1.28));
-    float ringEnvelope = exp(-radius * 0.035) * raft.z;
-    float ring = sin(radius * 0.19 - time * 3.0 + raft.z * 4.0) * ringEnvelope;
+    float ringRadius = 10.0 + mod(time * 20.0 + raft.z * 24.0, 112.0);
+    float ring = exp(-abs(radius - ringRadius) * 0.11) * exp(-ringRadius * 0.012) * raft.z;
 
     // The current runs down the panel. A narrow, asymmetric wake makes the
     // raft feel like it is displacing water instead of sitting on a texture.
@@ -231,49 +231,81 @@ const displaySource = `#version 300 es
     return field;
   }
 
+  float raftWaveRing(vec2 uv, vec3 raft, float time) {
+    vec2 delta = (uv - raft.xy) * u_resolution;
+    float radius = length(delta / vec2(1.0, 1.28));
+    float ringRadius = 24.0 + mod(time * 15.0 + raft.z * 30.0, 116.0);
+    float outer = 1.0 - smoothstep(0.0, 9.0, abs(radius - ringRadius));
+    float inner = 1.0 - smoothstep(0.0, 7.0, abs(radius - ringRadius * 0.62));
+    return (outer * 0.7 + inner * 0.3) * exp(-ringRadius * 0.007) * raft.z;
+  }
+
+  float raftWaveRingField(vec2 uv, float time) {
+    float field = 0.0;
+    for (int index = 0; index < 6; index++) {
+      if (index < u_raft_count) field = max(field, raftWaveRing(uv, u_raft_points[index], time));
+    }
+    return field;
+  }
+
   vec2 flowCoordinates(vec2 uv, float time) {
     vec2 localVelocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy;
     float center = riverCenter(uv.y, time * 0.7);
-    vec2 p = vec2((uv.x - center) * 8.2 + uv.y * 1.35, uv.y * 9.4);
-    p += localVelocity * vec2(1.8, -1.4);
+    vec2 p = vec2((uv.x - center) * 6.9 + uv.y * 0.8, uv.y * 11.2);
+    p += localVelocity * vec2(0.42, -0.32);
     vec2 warp = vec2(
       fbm(p * 0.42 + vec2(-time * 0.08, time * 0.04)),
       fbm(p * 0.42 + vec2(5.3 + time * 0.06, 2.1 - time * 0.05))
     ) - 0.5;
-    return p + warp * vec2(2.6, 1.7);
+    return p + warp * vec2(1.35, 0.7);
   }
 
   float surfaceHeight(vec2 uv, float time) {
-    vec2 p = flowCoordinates(uv, time);
-    float broad = fbm(p * 0.68 + vec2(0.0, -time * 0.25));
-    float middle = fbm(p * 1.45 + vec2(0.0, -time * 0.52));
-    float fine = fbm(p * 3.4 + vec2(0.0, -time * 0.92));
+    float center = riverCenter(uv.y, time * 0.7);
+    float across = (uv.x - center) * u_resolution.x;
+    float along = uv.y * u_resolution.y;
+    float broad = sin(across * 0.075 + sin(along * 0.010 - time * 0.65) * 1.7 + time * 0.18);
+    float middle = sin(across * 0.16 + sin(along * 0.021 + time * 0.9) * 0.72 - time * 0.3);
+    float fine = sin(across * 0.31 + sin(along * 0.037 - time * 0.7) * 0.34 + time * 0.2);
     float raftDisplacement = raftRippleField(uv, time);
-    return (broad - 0.5) * 0.06 + (middle - 0.5) * 0.024 + (fine - 0.5) * 0.007 + raftDisplacement * 0.021;
+    return broad * 0.018 + middle * 0.005 + fine * 0.001 + raftDisplacement * 0.003;
   }
 
   float caustic(vec2 uv, float time) {
-    vec2 p = flowCoordinates(uv, time);
-    float broad = fbm(p * vec2(0.72, 1.18) + vec2(-time * 0.07, -time * 0.32));
-    float broken = fbm(p * vec2(1.45, 2.35) + vec2(3.1 + time * 0.04, -time * 0.62));
-    float fine = noise(p * 4.2 + vec2(-2.3, -time * 1.06));
-    float broadRidge = 1.0 - abs(broad * 2.0 - 1.0);
-    float brokenRidge = 1.0 - abs(broken * 2.0 - 1.0);
-    float filament = smoothstep(0.58, 0.94, broadRidge * (0.72 + brokenRidge * 0.5));
-    float sparkle = pow(max(broadRidge * brokenRidge * (0.55 + fine * 0.65), 0.0), 3.5);
-    return clamp(filament * 0.72 + sparkle * 0.46, 0.0, 1.0);
+    float center = riverCenter(uv.y, time * 0.7);
+    float across = (uv.x - center) * u_resolution.x;
+    float along = uv.y * u_resolution.y;
+    float bend = sin(along * 0.012 + time * 0.6) * 1.55 + sin(along * 0.027 - time * 0.45) * 0.48;
+    float broad = smoothstep(0.6, 0.94, 0.5 + 0.5 * cos(across * 0.1 + bend));
+    float fineBend = sin(along * 0.023 - time * 0.8) * 0.74;
+    float fine = smoothstep(0.74, 0.98, 0.5 + 0.5 * cos(across * 0.22 + fineBend));
+    return clamp(broad * 0.72 + fine * 0.24, 0.0, 1.0);
+  }
+
+  float waterRibbons(vec2 uv, float time) {
+    float center = riverCenter(uv.y, time * 0.7);
+    float across = (uv.x - center) * u_resolution.x;
+    float along = uv.y * u_resolution.y;
+    float broadBend = sin(along * 0.010 + time * 0.7) * 1.6
+      + sin(along * 0.023 - time * 0.45) * 0.62
+      + (fbm(vec2(uv.x * 0.8 + time * 0.02, uv.y * 1.0 - time * 0.04)) - 0.5) * 1.2;
+    float broad = smoothstep(0.58, 0.94, 0.5 + 0.5 * cos(across * 0.105 + broadBend));
+    float fineBend = sin(along * 0.018 - time * 1.0) * 1.05 + sin(along * 0.041 + time * 0.55) * 0.34
+      + (fbm(vec2(uv.x * 1.2 - time * 0.02, uv.y * 1.6 - time * 0.06)) - 0.5) * 0.7;
+    float fine = smoothstep(0.72, 0.97, 0.5 + 0.5 * cos(across * 0.205 + fineBend));
+    return clamp(broad * 0.76 + fine * 0.3, 0.0, 1.0);
   }
 
   float raftFoam(vec2 uv, vec3 raft, float time) {
     vec2 delta = (uv - raft.xy) * u_resolution;
-    float bow = exp(-length(delta / vec2(9.0, 6.0))) * 0.78;
+    float bow = exp(-length(delta / vec2(14.0, 9.0))) * 0.58;
     float hullRadius = length(delta / vec2(36.0, 50.0));
-    float hullRipple = exp(-abs(hullRadius - 1.0) * 9.0) * 0.34;
+    float hullRipple = exp(-abs(hullRadius - 1.0) * 8.0) * 0.3;
     float downstream = max(-delta.y, 0.0);
     float wakeAxis = delta.x + sin(downstream * 0.08 + time * 1.2) * 3.0;
     float wake = exp(-abs(wakeAxis) * 0.11) * exp(-downstream * 0.028);
-    float breakup = 0.55 + 0.45 * noise(delta * 0.045 + vec2(time * 0.08, -time * 0.12));
-    return clamp((bow + hullRipple + wake * breakup * 0.42) * raft.z, 0.0, 1.0);
+    float wakeWave = 0.52 + 0.48 * sin(downstream * 0.2 - time * 1.7 + sin(delta.x * 0.04) * 0.7);
+    return clamp((bow + hullRipple + wake * wakeWave * 0.56) * raft.z, 0.0, 1.0);
   }
 
   float raftFoamField(vec2 uv, float time) {
@@ -286,7 +318,7 @@ const displaySource = `#version 300 es
 
   void main() {
     vec2 uv = v_uv;
-    float time = u_time * 0.22;
+    float time = u_time * 0.18;
     float current = riverCenter(uv.y, time * 0.7);
     float width = 0.46 + sin(uv.y * 3.2 - time * 0.18) * 0.012;
     float distance_to_current = abs(uv.x - current);
@@ -297,16 +329,19 @@ const displaySource = `#version 300 es
     float height = surfaceHeight(uv, time);
     float height_x = surfaceHeight(uv + vec2(texel.x, 0.0), time);
     float height_y = surfaceHeight(uv + vec2(0.0, texel.y), time);
-    vec3 normal = normalize(vec3((height - height_x) * 42.0, (height - height_y) * 42.0, 1.0));
+    vec3 normal = normalize(vec3((height - height_x) * 10.0, (height - height_y) * 10.0, 1.0));
     vec3 light_direction = normalize(vec3(-0.45, 0.82, 1.2));
     float diffuse = 0.55 + 0.45 * max(dot(normal, light_direction), 0.0);
-    float specular = pow(max(dot(reflect(-light_direction, normal), vec3(0.0, 0.0, 1.0)), 0.0), 28.0);
+    float specular = pow(max(dot(reflect(-light_direction, normal), vec3(0.0, 0.0, 1.0)), 0.0), 16.0);
     float ripple = raftRippleField(uv, time);
+    float waveRing = raftWaveRingField(uv, time);
     float foam = raftFoamField(uv, time);
+    float ribbons = waterRibbons(uv, time);
     vec2 localVelocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy;
     float fluidSpeed = length(localVelocity);
-    float grain = fbm(vec2(uv.x * 3.2 + time * 0.03, uv.y * 4.8 - time * 0.12));
-    float sunwash = smoothstep(0.28, 0.84, fbm(vec2(uv.x * 1.05 + time * 0.035, uv.y * 1.35 - time * 0.06)));
+    float depthTone = fbm(vec2(uv.x * 0.65 + time * 0.02, uv.y * 0.8 - time * 0.03));
+    float grain = depthTone;
+    float sunwash = smoothstep(0.26, 0.76, depthTone);
     float causticLight = caustic(uv + vec2(ripple * 0.018, ripple * 0.008), time);
     float crest = smoothstep(0.018, 0.05, height) * smoothstep(0.25, 0.72, grain);
     float shallow_edge = (1.0 - smoothstep(0.0, 0.18, water)) * edge;
@@ -329,22 +364,24 @@ const displaySource = `#version 300 es
       + texture(u_water_texture, plateUv2 + vec2(0.0, -0.025)).rgb
       + texture(u_water_texture, plateUv2 + vec2(0.0, 0.025)).rgb
     ) * 0.2;
-    plate = mix(vec3(0.018, 0.16, 0.18), plate, 0.64);
+    plate = mix(vec3(0.018, 0.16, 0.18), plate, 0.38);
     plate = pow(plate, vec3(1.08));
-    vec3 naturalWater = mix(deep, shallow, 0.28 + sunwash * 0.38 + diffuse * 0.12);
-    vec3 color = mix(naturalWater, plate * vec3(0.58, 0.78, 0.8), 0.18);
-    color += vec3(0.025, 0.095, 0.095) * grain * edge;
-    color += vec3(0.09, 0.31, 0.32) * diffuse * edge;
-    color += vec3(0.2, 0.5, 0.5) * causticLight * (0.28 + sunwash * 0.34) * edge;
-    color += vec3(0.62, 0.94, 0.82) * specular * (0.3 + sunwash * 0.3) * edge;
-    color += vec3(0.5, 0.82, 0.7) * crest * 0.18 * edge;
-    color += vec3(0.44, 0.85, 0.74) * abs(ripple) * (0.1 + fluidSpeed * 0.16) * edge;
-    color += vec3(0.48, 0.9, 0.78) * smoothstep(0.64, 0.95, causticLight) * 0.28 * edge;
-    color += vec3(0.72, 0.98, 0.87) * foam * 0.68 * edge;
+    vec3 naturalWater = mix(deep, shallow, 0.16 + depthTone * 0.3 + diffuse * 0.08);
+    vec3 color = mix(naturalWater, plate * vec3(0.58, 0.78, 0.8), 0.0);
+    color += vec3(0.012, 0.05, 0.055) * grain * edge;
+    color += vec3(0.025, 0.11, 0.12) * diffuse * edge;
+    color += vec3(0.08, 0.23, 0.23) * causticLight * (0.1 + sunwash * 0.08) * edge;
+    color += vec3(0.14, 0.36, 0.32) * ribbons * (0.2 + sunwash * 0.1) * edge;
+    color += vec3(0.36, 0.76, 0.64) * specular * (0.12 + sunwash * 0.1) * edge;
+    color += vec3(0.35, 0.72, 0.6) * crest * 0.12 * edge;
+    color += vec3(0.3, 0.7, 0.6) * abs(ripple) * 0.0 * edge;
+    color += vec3(0.48, 0.9, 0.72) * waveRing * 0.38 * edge;
+    color += vec3(0.38, 0.82, 0.67) * smoothstep(0.7, 0.98, causticLight) * 0.2 * edge;
+    color += vec3(0.68, 0.96, 0.8) * foam * 0.26 * edge;
     color *= 0.82;
     color += vec3(0.43, 0.76, 0.67) * shallow_edge * 0.19;
     color += vec3(0.018, 0.11, 0.14) * depth;
-    out_color = vec4(color, edge * 0.96);
+    out_color = vec4(color, 1.0);
   }
 `;
 
