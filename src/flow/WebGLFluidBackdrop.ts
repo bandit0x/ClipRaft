@@ -174,6 +174,7 @@ const displaySource = `#version 300 es
   in vec2 v_uv;
   uniform sampler2D u_velocity;
   uniform vec2 u_velocity_texel_size;
+  uniform sampler2D u_water_texture;
   uniform float u_time;
   uniform vec2 u_resolution;
   uniform vec3 u_raft_points[6];
@@ -204,11 +205,15 @@ const displaySource = `#version 300 es
 
   vec2 smoothVelocity(vec2 uv) {
     vec2 texel = u_velocity_texel_size;
-    vec2 velocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy * 0.32;
-    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, 0.0), 0.001, 0.999)).xy * 0.17;
-    velocity += texture(u_velocity, clamp(uv - vec2(texel.x, 0.0), 0.001, 0.999)).xy * 0.17;
-    velocity += texture(u_velocity, clamp(uv + vec2(0.0, texel.y), 0.001, 0.999)).xy * 0.17;
-    velocity += texture(u_velocity, clamp(uv - vec2(0.0, texel.y), 0.001, 0.999)).xy * 0.17;
+    vec2 velocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy * 0.28;
+    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, 0.0), 0.001, 0.999)).xy * 0.11;
+    velocity += texture(u_velocity, clamp(uv - vec2(texel.x, 0.0), 0.001, 0.999)).xy * 0.11;
+    velocity += texture(u_velocity, clamp(uv + vec2(0.0, texel.y), 0.001, 0.999)).xy * 0.11;
+    velocity += texture(u_velocity, clamp(uv - vec2(0.0, texel.y), 0.001, 0.999)).xy * 0.11;
+    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, texel.y), 0.001, 0.999)).xy * 0.0675;
+    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, -texel.y), 0.001, 0.999)).xy * 0.0675;
+    velocity += texture(u_velocity, clamp(uv + vec2(-texel.x, texel.y), 0.001, 0.999)).xy * 0.0675;
+    velocity += texture(u_velocity, clamp(uv - vec2(texel.x, texel.y), 0.001, 0.999)).xy * 0.0675;
     return velocity;
   }
 
@@ -362,19 +367,21 @@ const displaySource = `#version 300 es
     float shallow_edge = (1.0 - smoothstep(0.0, 0.18, water)) * edge;
     float depth = smoothstep(0.04, 0.44, water) * (1.0 - smoothstep(0.5, 0.9, water));
 
-    vec3 shallow = vec3(0.055, 0.48, 0.52);
-    vec3 deep = vec3(0.008, 0.16, 0.21);
+    vec3 shallow = vec3(0.055, 0.52, 0.56);
+    vec3 deep = vec3(0.008, 0.17, 0.22);
+    vec2 plateUv = clamp(vec2(0.12 + uv.x * 0.76 + height * 1.8 + ripple * 0.01, 0.06 + uv.y * 0.86 + height_y * 0.2), 0.02, 0.98);
+    vec3 plateTone = textureLod(u_water_texture, plateUv, 4.0).rgb;
     vec3 naturalWater = mix(deep, shallow, 0.16 + depthTone * 0.3 + diffuse * 0.08);
-    vec3 color = naturalWater;
+    vec3 color = mix(naturalWater, plateTone * vec3(0.58, 0.78, 0.8), 0.1);
     color += vec3(0.012, 0.05, 0.055) * grain * edge;
     color += vec3(0.025, 0.11, 0.12) * diffuse * edge;
-    color += vec3(0.08, 0.23, 0.23) * causticLight * (0.15 + sunwash * 0.12) * edge;
-    color += vec3(0.14, 0.36, 0.32) * ribbons * (0.26 + sunwash * 0.12) * edge;
-    color += vec3(0.36, 0.76, 0.64) * specular * (0.2 + sunwash * 0.16) * edge;
+    color += vec3(0.08, 0.23, 0.23) * causticLight * (0.21 + sunwash * 0.16) * edge;
+    color += vec3(0.14, 0.36, 0.32) * ribbons * (0.34 + sunwash * 0.18) * edge;
+    color += vec3(0.36, 0.76, 0.64) * specular * (0.32 + sunwash * 0.22) * edge;
     color += vec3(0.35, 0.72, 0.6) * crest * 0.18 * edge;
-    color += vec3(0.5, 0.92, 0.74) * waveRing * 0.7 * edge;
-    color += vec3(0.38, 0.82, 0.67) * smoothstep(0.7, 0.98, causticLight) * 0.26 * edge;
-    color += vec3(0.68, 0.96, 0.8) * foam * 0.48 * edge;
+    color += vec3(0.5, 0.92, 0.74) * waveRing * 0.86 * edge;
+    color += vec3(0.38, 0.82, 0.67) * smoothstep(0.7, 0.98, causticLight) * 0.32 * edge;
+    color += vec3(0.68, 0.96, 0.8) * foam * 0.6 * edge;
     color *= 0.9;
     color += vec3(0.43, 0.76, 0.67) * shallow_edge * 0.19;
     color += vec3(0.018, 0.11, 0.14) * depth;
@@ -472,12 +479,33 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
     pressure: getUniforms(gl, pressureProgram!, ["u_pressure", "u_divergence", "u_texel_size"]),
     gradient: getUniforms(gl, gradientProgram!, ["u_pressure", "u_velocity", "u_texel_size"]),
     advection: getUniforms(gl, advectionProgram!, ["u_velocity", "u_source", "u_texel_size", "u_dt", "u_dissipation"]),
-    display: getUniforms(gl, displayProgram!, ["u_velocity", "u_velocity_texel_size", "u_time", "u_resolution", "u_raft_points[0]", "u_raft_count"]),
+    display: getUniforms(gl, displayProgram!, ["u_velocity", "u_velocity_texel_size", "u_water_texture", "u_time", "u_resolution", "u_raft_points[0]", "u_raft_count"]),
   };
 
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
   if (!vao || !buffer) return { setRafts: () => undefined, cleanup: () => undefined };
+
+  const waterTexture = gl.createTexture();
+  if (!waterTexture) return { setRafts: () => undefined, cleanup: () => undefined };
+  gl.bindTexture(gl.TEXTURE_2D, waterTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([37, 137, 143, 255]));
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  const waterImage = new Image();
+  waterImage.onload = () => {
+    gl.bindTexture(gl.TEXTURE_2D, waterTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, waterImage);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  };
+  waterImage.src = "/assets/stream-water.png";
 
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -494,10 +522,18 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   let simHeight = 0;
   const raftData = new Float32Array(18);
   let raftCount = 0;
+  let raftImpulseQueue: FluidRaft[] = [];
+  let raftSnapshot = "";
   const setRafts = (rafts: FluidRaft[]) => {
-    raftCount = Math.min(rafts.length, 6);
+    const nextRafts = rafts.slice(0, 6).map((raft) => ({ ...raft }));
+    const nextSnapshot = nextRafts.map((raft) => `${raft.x.toFixed(3)},${raft.y.toFixed(3)},${raft.strength.toFixed(2)}`).join("|");
+    if (nextSnapshot !== raftSnapshot) {
+      raftImpulseQueue = nextRafts;
+      raftSnapshot = nextSnapshot;
+    }
+    raftCount = nextRafts.length;
     raftData.fill(-2);
-    rafts.slice(0, 6).forEach((raft, index) => {
+    nextRafts.forEach((raft, index) => {
       const offset = index * 3;
       raftData[offset] = raft.x;
       raftData[offset + 1] = raft.y;
@@ -517,7 +553,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   };
 
   const initializeTargets = () => {
-    const width = 64;
+    const width = Math.min(128, Math.max(96, Math.round(canvas.width / 2.5)));
     const height = Math.max(128, Math.min(256, Math.round(width * canvas.height / Math.max(1, canvas.width))));
     if (width === simWidth && height === simHeight && velocity) return;
     destroyTargets();
@@ -570,6 +606,18 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
       gl.uniform1f(uniforms.splat.u_radius, radius);
     });
     velocity.swap();
+  };
+
+  const emitRaftImpulses = () => {
+    if (!raftImpulseQueue.length) return;
+    const rafts = raftImpulseQueue;
+    raftImpulseQueue = [];
+    rafts.forEach((raft) => {
+      const force = 0.018 + raft.strength * 0.012;
+      splat(raft.x, raft.y, 0.0, -force, 0.006);
+      splat(raft.x - 0.02, raft.y + 0.006, force * 0.34, -force * 0.42, 0.004);
+      splat(raft.x + 0.02, raft.y + 0.006, -force * 0.34, -force * 0.42, 0.004);
+    });
   };
 
   const step = (dt: number) => {
@@ -655,9 +703,11 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
         splat(0.5 + Math.sin(phase * 1.7) * 0.055, 0.97, Math.sin(phase) * 0.045, -0.18, 0.008);
         lastImpulse = now;
       }
+      emitRaftImpulses();
       step(dt);
       draw(displayProgram!, null, () => {
         bindTexture(velocity!.read.texture, 0, uniforms.display.u_velocity);
+        bindTexture(waterTexture, 1, uniforms.display.u_water_texture);
         gl.uniform2f(uniforms.display.u_velocity_texel_size, velocity!.read.texelX, velocity!.read.texelY);
         gl.uniform1f(uniforms.display.u_time, now / 1000);
         gl.uniform2f(uniforms.display.u_resolution, canvas.width, canvas.height);
@@ -676,6 +726,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
       resizeObserver.disconnect();
       destroyTargets();
       programs.forEach((program) => { if (program) gl.deleteProgram(program); });
+      gl.deleteTexture(waterTexture);
       gl.deleteBuffer(buffer);
       gl.deleteVertexArray(vao);
     },
