@@ -3,7 +3,7 @@ import type { MutableRefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
-import { mountFluidSurface } from "./flow/WebGLFluidBackdrop";
+import { mountFluidSurface, type FluidRaft } from "./flow/WebGLFluidBackdrop";
 
 type Modality = "text" | "image" | "file";
 
@@ -42,14 +42,24 @@ function Icon({ name, size = 16 }: { name: string; size?: number }) {
   );
 }
 
-function FlowBackdrop() {
+function FlowBackdrop({ rafts }: { rafts: FluidRaft[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const controllerRef = useRef<ReturnType<typeof mountFluidSurface> | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    return mountFluidSurface(canvas);
+    const controller = mountFluidSurface(canvas);
+    controllerRef.current = controller;
+    return () => {
+      controller.cleanup();
+      controllerRef.current = null;
+    };
   }, []);
+
+  useEffect(() => {
+    controllerRef.current?.setRafts(rafts);
+  }, [rafts]);
 
   return <canvas ref={canvasRef} className="flow-backdrop" aria-hidden="true" />;
 }
@@ -98,6 +108,7 @@ function RaftCard({ card, index, removing, onDelete, onRestore, setRef }: {
 }) {
   return (
     <div className="raft-motion" ref={setRef}>
+      <div className={`raft-wake wake-${index % 3}`} aria-hidden="true"><span /><span /><span /></div>
       <article className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${removing ? "is-removing" : ""}`}>
         <div className="raft-rope rope-top" />
         <div className="raft-rope rope-bottom" />
@@ -128,6 +139,8 @@ function App() {
   const [notice, setNotice] = useState("复制内容会在这里顺流靠岸");
   const [autoPaste, setAutoPaste] = useState(true);
   const refs = useRef(new Map<string, HTMLDivElement>());
+  const worldRef = useRef<HTMLDivElement>(null);
+  const [raftAnchors, setRaftAnchors] = useState<FluidRaft[]>([]);
 
   const refresh = useCallback(async () => {
     try {
@@ -152,6 +165,25 @@ function App() {
 
   const visibleCards = cards.filter((card) => `${card.preview} ${card.detail}`.toLowerCase().includes(query.toLowerCase()));
 
+  useLayoutEffect(() => {
+    const world = worldRef.current;
+    if (!world) return;
+    const worldRect = world.getBoundingClientRect();
+    if (!worldRect.width || !worldRect.height) return;
+    const next = visibleCards.flatMap((card, index) => {
+      const motion = refs.current.get(card.id);
+      const raft = motion?.querySelector<HTMLElement>(".raft-card");
+      if (!raft) return [];
+      const rect = raft.getBoundingClientRect();
+      return [{
+        x: (rect.left + rect.width / 2 - worldRect.left) / worldRect.width,
+        y: 1 - (rect.top + rect.height / 2 - worldRect.top) / worldRect.height,
+        strength: Math.max(0.48, 0.82 - index * 0.08),
+      }];
+    });
+    setRaftAnchors(next);
+  }, [cards, query, visibleCards.length]);
+
   const deleteCard = async (id: string) => {
     setRemovingId(id);
     window.setTimeout(async () => {
@@ -169,8 +201,8 @@ function App() {
 
   return (
     <main className="app-shell">
-      <div className="creek-world" aria-label="ClipRaft 剪贴板面板">
-        <FlowBackdrop />
+      <div ref={worldRef} className="creek-world" aria-label="ClipRaft 剪贴板面板">
+        <FlowBackdrop rafts={raftAnchors} />
         <div className="water-highlight highlight-one" />
         <div className="water-highlight highlight-two" />
         <div className="bank-stone stone-one" />
