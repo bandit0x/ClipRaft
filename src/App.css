@@ -38,6 +38,7 @@ button { border: 0; cursor: pointer; }
 .raft-motion { position: relative; width: 100px; min-height: 108px; will-change: transform; }
 .raft-wake { position: absolute; z-index: 0; inset: 8px -17px -30px; pointer-events: none; }
 .raft-wake::before { position: absolute; content: ""; top: 28px; left: 50%; width: 42px; height: 86px; background: linear-gradient(180deg, rgba(230, 255, 238, .22), rgba(132, 230, 203, .1) 52%, transparent); clip-path: polygon(35% 0, 65% 0, 100% 100%, 0 100%); filter: blur(5px); opacity: .54; transform: translateX(-50%); mix-blend-mode: screen; animation: wake-drift 5.4s ease-in-out infinite; }
+.raft-wake::after { position: absolute; content: ""; top: 42px; left: 50%; width: 80px; height: 35px; background: radial-gradient(ellipse, transparent 34%, rgba(217, 255, 229, .2) 42%, rgba(135, 230, 203, .08) 54%, transparent 70%); filter: blur(2px); opacity: .7; transform: translateX(-50%) rotate(-4deg); mix-blend-mode: screen; animation: bow-ring 4.4s ease-in-out infinite; }
 .raft-wake span { position: absolute; top: 73%; left: 50%; width: 72px; height: 18px; border: 1px solid rgba(202, 245, 217, .5); border-radius: 50%; opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); filter: blur(.35px); mix-blend-mode: screen; animation: raft-ripple 4.8s cubic-bezier(.2, .8, .25, 1) infinite; }
 .raft-wake span:nth-child(2) { animation-delay: -1.6s; }
 .raft-wake span:nth-child(3) { animation-delay: -3.2s; }
@@ -98,6 +99,7 @@ button { border: 0; cursor: pointer; }
 
 @keyframes water-glide { 0%, 100% { opacity: .18; transform: translateX(-8px) rotate(-18deg) scale(.86); } 50% { opacity: .62; transform: translateX(17px) rotate(-12deg) scale(1.08); } }
 @keyframes wake-drift { 0%, 100% { opacity: .28; transform: translateX(-50%) translateY(0) scaleX(.78); } 50% { opacity: .64; transform: translateX(-50%) translateY(8px) scaleX(1.04); } }
+@keyframes bow-ring { 0%, 100% { opacity: .24; transform: translateX(-50%) rotate(-4deg) scale(.86); } 50% { opacity: .62; transform: translateX(-50%) rotate(-4deg) scale(1.04); } }
 @keyframes raft-ripple { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); } 14% { opacity: .44; } 74% { opacity: .13; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(1.18); } }
 @keyframes raft-downstream { to { opacity: 0; transform: translate3d(24px, 28px, 0) rotate(4deg); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }

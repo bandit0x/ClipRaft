@@ -234,7 +234,7 @@ const displaySource = `#version 300 es
   vec2 flowCoordinates(vec2 uv, float time) {
     vec2 localVelocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy;
     float center = riverCenter(uv.y, time * 0.7);
-    vec2 p = vec2((uv.x - center) * 9.5, uv.y * 10.5);
+    vec2 p = vec2((uv.x - center) * 8.2 + uv.y * 1.35, uv.y * 9.4);
     p += localVelocity * vec2(1.8, -1.4);
     vec2 warp = vec2(
       fbm(p * 0.42 + vec2(-time * 0.08, time * 0.04)),
@@ -297,13 +297,14 @@ const displaySource = `#version 300 es
     float height = surfaceHeight(uv, time);
     float height_x = surfaceHeight(uv + vec2(texel.x, 0.0), time);
     float height_y = surfaceHeight(uv + vec2(0.0, texel.y), time);
-    vec3 normal = normalize(vec3((height - height_x) * 72.0, (height - height_y) * 72.0, 1.0));
+    vec3 normal = normalize(vec3((height - height_x) * 42.0, (height - height_y) * 42.0, 1.0));
     vec3 light_direction = normalize(vec3(-0.45, 0.82, 1.2));
     float diffuse = 0.55 + 0.45 * max(dot(normal, light_direction), 0.0);
     float specular = pow(max(dot(reflect(-light_direction, normal), vec3(0.0, 0.0, 1.0)), 0.0), 28.0);
     float ripple = raftRippleField(uv, time);
     float foam = raftFoamField(uv, time);
-    float fluidSpeed = length(texture(u_velocity, clamp(uv, 0.001, 0.999)).xy);
+    vec2 localVelocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy;
+    float fluidSpeed = length(localVelocity);
     float grain = fbm(vec2(uv.x * 3.2 + time * 0.03, uv.y * 4.8 - time * 0.12));
     float sunwash = smoothstep(0.28, 0.84, fbm(vec2(uv.x * 1.05 + time * 0.035, uv.y * 1.35 - time * 0.06)));
     float causticLight = caustic(uv + vec2(ripple * 0.018, ripple * 0.008), time);
@@ -314,11 +315,11 @@ const displaySource = `#version 300 es
     vec3 shallow = vec3(0.055, 0.48, 0.52);
     vec3 deep = vec3(0.008, 0.16, 0.21);
     vec2 plateUv = vec2(
-      clamp(0.08 + uv.x * 0.84 + height * 3.5 + ripple * 0.014, 0.02, 0.98),
+      clamp(0.08 + uv.x * 0.84 + height * 3.5 + ripple * 0.014 + localVelocity.x * 0.18, 0.02, 0.98),
       clamp(0.06 + uv.y * 0.88 + grain * 0.025, 0.02, 0.98)
     );
     vec2 plateUv2 = vec2(
-      clamp(0.12 + uv.x * 0.76 - height_y * 2.8, 0.03, 0.97),
+      clamp(0.12 + uv.x * 0.76 - height_y * 2.8 + localVelocity.x * 0.12, 0.03, 0.97),
       clamp(0.08 + uv.y * 0.84 - height * 0.12, 0.03, 0.97)
     );
     vec3 plate = (
@@ -331,7 +332,7 @@ const displaySource = `#version 300 es
     plate = mix(vec3(0.018, 0.16, 0.18), plate, 0.64);
     plate = pow(plate, vec3(1.08));
     vec3 naturalWater = mix(deep, shallow, 0.28 + sunwash * 0.38 + diffuse * 0.12);
-    vec3 color = mix(naturalWater, plate * vec3(0.58, 0.78, 0.8), 0.12);
+    vec3 color = mix(naturalWater, plate * vec3(0.58, 0.78, 0.8), 0.18);
     color += vec3(0.025, 0.095, 0.095) * grain * edge;
     color += vec3(0.09, 0.31, 0.32) * diffuse * edge;
     color += vec3(0.2, 0.5, 0.5) * causticLight * (0.28 + sunwash * 0.34) * edge;
