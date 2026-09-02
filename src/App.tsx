@@ -301,6 +301,8 @@ function App() {
     <main className="app-shell">
       <div ref={worldRef} className="creek-world" aria-label="ClipRaft 剪贴板面板">
         <FlowBackdrop rafts={raftAnchors} />
+        <div className="water-photo-material" aria-hidden="true" />
+        <div className="water-caustic-layer" aria-hidden="true" />
         <div className="water-highlight highlight-one" />
         <div className="water-highlight highlight-two" />
         <div className="bank-stone stone-one" />
