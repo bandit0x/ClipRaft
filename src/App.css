@@ -24,13 +24,10 @@ button { border: 0; cursor: pointer; }
 .flow-backdrop { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; display: block; background: transparent; pointer-events: none; }
 .water-photo-material { position: absolute; z-index: 1; inset: -20px; overflow: hidden; background: #128890; opacity: .38; filter: blur(.2px) saturate(1.18) brightness(.95) contrast(1.06); mix-blend-mode: normal; pointer-events: none; }
 .water-photo-material::before, .water-photo-material::after { position: absolute; content: ""; right: -10%; left: -10%; height: 62%; background: url("/assets/plates/creek-water-v2.png") center / cover no-repeat; }
-.water-photo-material::before { top: -4%; background-position: 42% 14%; mask-image: linear-gradient(to bottom, #000 0 78%, transparent 100%); animation: water-photo-drift-a 12s ease-in-out infinite; }
-.water-photo-material::after { bottom: -4%; background-position: 61% 82%; mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 100%); animation: water-photo-drift-b 14s ease-in-out -5s infinite; }
-.water-caustic-layer { position: absolute; z-index: 2; inset: -7%; width: 114%; height: 114%; overflow: visible; opacity: .72; mix-blend-mode: screen; pointer-events: none; }
-.caustic-mesh { transform-box: fill-box; transform-origin: center; }
-.caustic-mesh-primary { animation: caustic-drift 7.2s ease-in-out infinite; }
-.caustic-mesh-micro { opacity: .5; animation: caustic-crossflow 5.6s ease-in-out -2.1s infinite; }
-.water-highlight { position: absolute; z-index: 2; width: 42px; height: 10px; border-radius: 50%; background: radial-gradient(ellipse, rgba(231, 255, 245, .58), rgba(154, 238, 215, .17) 42%, transparent 72%); filter: blur(2.5px); opacity: .62; transform: rotate(-18deg); animation: water-glide 5.8s ease-in-out infinite; pointer-events: none; }
+.water-photo-material::before { top: -4%; background-position: 42% 14%; mask-image: linear-gradient(to bottom, #000 0 78%, transparent 100%); }
+.water-photo-material::after { bottom: -4%; background-position: 61% 82%; mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 100%); }
+.water-caustic-layer { position: absolute; z-index: 2; inset: 0; background: url("/assets/stream-water.png") 0 0 / 92px 78px repeat; filter: saturate(1.05) contrast(1.08); opacity: .28; mix-blend-mode: screen; pointer-events: none; }
+.water-highlight { position: absolute; z-index: 2; width: 42px; height: 10px; border-radius: 50%; background: radial-gradient(ellipse, rgba(231, 255, 245, .58), rgba(154, 238, 215, .17) 42%, transparent 72%); filter: blur(2.5px); opacity: .34; transform: rotate(-18deg); pointer-events: none; }
 .highlight-one { top: 23%; left: 44%; }
 .highlight-two { top: 67%; left: 7%; width: 42px; animation-delay: -3s; }
 .bank-stone { position: absolute; z-index: 2; border-radius: 56% 44% 49% 51%; background: radial-gradient(circle at 35% 28%, #e9e2c5, #a59d84 63%, #6c7469); box-shadow: inset -3px -3px 6px rgba(12, 47, 50, .26), 0 5px 10px rgba(3, 39, 46, .22); opacity: .54; pointer-events: none; }
@@ -122,11 +119,6 @@ button { border: 0; cursor: pointer; }
 .icon { flex: 0 0 auto; }
 .raft-content:focus-visible, .raft-actions button:focus-visible, .trash-bay:focus-visible, .detached-dock button:focus-visible, .undo-action:focus-visible, .auto-paste:focus-visible { outline: 2px solid #f4ffd7; outline-offset: 3px; }
 
-@keyframes water-glide { 0%, 100% { opacity: .18; transform: translateX(-8px) rotate(-18deg) scale(.86); } 50% { opacity: .62; transform: translateX(17px) rotate(-12deg) scale(1.08); } }
-@keyframes water-photo-drift-a { 0%, 100% { transform: translate3d(-2px, 0, 0) scale(1.015); } 50% { transform: translate3d(3px, -8px, 0) scale(1.03); } }
-@keyframes water-photo-drift-b { 0%, 100% { transform: translate3d(2px, 0, 0) scale(1.02); } 50% { transform: translate3d(-3px, -9px, 0) scale(1.035); } }
-@keyframes caustic-drift { 0%, 100% { transform: translate3d(-3px, 0, 0) scale(.99) rotate(-.5deg); opacity: .44; } 50% { transform: translate3d(5px, -12px, 0) scale(1.025) rotate(.6deg); opacity: .74; } }
-@keyframes caustic-crossflow { 0%, 100% { transform: translate3d(-4px, 2px, 0) rotate(-1.8deg) scale(1.025); opacity: .32; } 50% { transform: translate3d(5px, -8px, 0) rotate(-.5deg) scale(1.045); opacity: .58; } }
 @keyframes wake-drift { 0%, 100% { opacity: .28; transform: translateX(-50%) translateY(0) scaleX(.78); } 50% { opacity: .64; transform: translateX(-50%) translateY(8px) scaleX(1.04); } }
 @keyframes bow-ring { 0%, 100% { opacity: .24; transform: translateX(-50%) rotate(-4deg) scale(.86); } 50% { opacity: .62; transform: translateX(-50%) rotate(-4deg) scale(1.04); } }
 @keyframes raft-ripple { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); } 14% { opacity: .44; } 74% { opacity: .13; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(1.18); } }

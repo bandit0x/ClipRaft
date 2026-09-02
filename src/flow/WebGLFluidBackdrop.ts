@@ -267,9 +267,11 @@ const displaySource = `#version 300 es
     vec2 delta = (uv - raft.xy) * u_resolution;
     delta.x *= 1.08;
     float radius = length(delta / vec2(1.0, 1.28));
-    float ringRadius = 16.0 + mod(time * 28.0 + raft.z * 24.0, 124.0);
+    float ringProgress = fract((time * 28.0 + raft.z * 24.0) / 124.0);
+    float ringRadius = 16.0 + ringProgress * 124.0;
     float ringWidth = 1.5 + ringRadius * 0.016;
-    float ring = exp(-pow(abs(radius - ringRadius) / ringWidth, 2.0)) * exp(-ringRadius * 0.009) * raft.z;
+    float ringLife = smoothstep(0.0, 0.08, ringProgress) * (1.0 - smoothstep(0.68, 1.0, ringProgress));
+    float ring = exp(-pow(abs(radius - ringRadius) / ringWidth, 2.0)) * exp(-ringRadius * 0.009) * ringLife * raft.z;
 
     float downstream = max(-delta.y, 0.0);
     float wakeSpread = 8.0 + downstream * 0.115;
@@ -291,14 +293,16 @@ const displaySource = `#version 300 es
   float raftWaveRing(vec2 uv, vec3 raft, float time) {
     vec2 delta = (uv - raft.xy) * u_resolution;
     float radius = length(delta / vec2(1.0, 1.28));
-    float ringRadius = 18.0 + mod(time * 32.0 + raft.z * 30.0, 138.0);
+    float ringProgress = fract((time * 32.0 + raft.z * 30.0) / 138.0);
+    float ringRadius = 18.0 + ringProgress * 138.0;
     float ringWidth = 2.0 + ringRadius * 0.024;
     float angle = atan(delta.x, delta.y);
     float wobble = 1.0 + 0.08 * sin(angle * 3.0 + time * 1.1) + 0.045 * sin(angle * 5.0 - time * 0.7);
     float ring = exp(-pow(abs(radius / wobble - ringRadius) / ringWidth, 2.0));
     float ringNoise = fbm(vec2(angle * 2.4 + time * 0.12, radius * 0.022 - time * 0.08));
     float breakup = 0.3 + 0.7 * smoothstep(0.4, 0.72, ringNoise);
-    return ring * breakup * exp(-ringRadius * 0.008) * raft.z;
+    float ringLife = smoothstep(0.0, 0.08, ringProgress) * (1.0 - smoothstep(0.66, 1.0, ringProgress));
+    return ring * breakup * exp(-ringRadius * 0.008) * ringLife * raft.z;
   }
 
   float raftWaveRingField(vec2 uv, float time) {
