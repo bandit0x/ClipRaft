@@ -282,7 +282,7 @@ const displaySource = `#version 300 es
     float ringWidth = 1.5 + ringRadius * 0.016;
     float ring = exp(-pow(abs(radius - ringRadius) / ringWidth, 2.0)) * exp(-ringRadius * 0.009) * raft.z;
 
-    float downstream = max(delta.y, 0.0);
+    float downstream = max(-delta.y, 0.0);
     float wakeSpread = 8.0 + downstream * 0.115;
     float wakeAxis = abs(delta.x + sin(downstream * 0.046 + time * 1.15) * 3.0);
     float wake = (1.0 - smoothstep(0.0, wakeSpread, wakeAxis)) * exp(-downstream * 0.011);
@@ -389,12 +389,16 @@ const displaySource = `#version 300 es
     float bow = exp(-length(delta / vec2(15.0, 9.0))) * 0.7;
     float hullRadius = length(delta / vec2(36.0, 50.0));
     float hullRipple = exp(-pow(abs(hullRadius - 1.0) * 5.0, 2.0)) * 0.34;
-    float downstream = max(delta.y, 0.0);
-    float spread = 10.0 + downstream * 0.14;
-    float wakeAxis = abs(delta.x + sin(downstream * 0.05 + time * 1.15) * 3.0);
-    float wake = (1.0 - smoothstep(0.0, spread, wakeAxis)) * exp(-downstream * 0.014);
-    float wakeWave = 0.45 + 0.55 * sin(downstream * 0.18 - time * 1.75 + sin(delta.x * 0.04) * 0.8);
-    return clamp((bow + hullRipple + wake * wakeWave * 0.72) * raft.z, 0.0, 1.0);
+    float downstream = max(-delta.y, 0.0);
+    float veeDistance = 8.0 + downstream * 0.13;
+    float veeWidth = 2.1 + downstream * 0.012;
+    float veeWake = exp(-pow((abs(delta.x) - veeDistance) / veeWidth, 2.0)) * exp(-downstream * 0.012);
+    float centerSpread = 9.0 + downstream * 0.08;
+    float centerWake = (1.0 - smoothstep(0.0, centerSpread, abs(delta.x))) * exp(-downstream * 0.018);
+    float breakup = 0.46 + 0.54 * fbm(vec2(delta.x * 0.028 + time * 0.06, downstream * 0.02 - time * 0.09));
+    float wakeWave = 0.42 + 0.58 * sin(downstream * 0.18 - time * 1.75 + sin(delta.x * 0.04) * 0.8);
+    float wake = (veeWake * 0.9 + centerWake * 0.24) * (0.42 + 0.58 * wakeWave) * breakup;
+    return clamp((bow + hullRipple + wake * 0.82) * raft.z, 0.0, 1.0);
   }
 
   float raftFoamField(vec2 uv, float time) {
@@ -450,8 +454,8 @@ const displaySource = `#version 300 es
     color += vec3(0.35, 0.72, 0.6) * crest * 0.18 * edge;
     color += vec3(0.5, 0.92, 0.74) * waveRing * 0.86 * edge;
     color += vec3(0.38, 0.82, 0.67) * smoothstep(0.78, 0.98, causticLight) * 0.12 * edge;
-    color += vec3(0.68, 0.96, 0.8) * foam * 0.6 * edge;
-    color += vec3(0.42, 0.84, 0.72) * surfaceSheen * 0.16 * edge;
+    color += vec3(0.68, 0.96, 0.8) * foam * 0.9 * edge;
+    color += vec3(0.42, 0.84, 0.72) * surfaceSheen * 0.24 * edge;
     color += vec3(0.64, 0.96, 0.82) * sparkle * 0.04 * edge;
     color *= 0.9;
     color += vec3(0.43, 0.76, 0.67) * shallow_edge * 0.19;
@@ -599,9 +603,11 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   const raftData = new Float32Array(18);
   let raftCount = 0;
   let raftImpulseQueue: FluidRaft[] = [];
+  let activeRafts: FluidRaft[] = [];
   let raftSnapshot = "";
   const setRafts = (rafts: FluidRaft[]) => {
     const nextRafts = rafts.slice(0, 6).map((raft) => ({ ...raft }));
+    activeRafts = nextRafts;
     const nextSnapshot = nextRafts.map((raft) => `${raft.x.toFixed(3)},${raft.y.toFixed(3)},${raft.strength.toFixed(2)}`).join("|");
     if (nextSnapshot !== raftSnapshot) {
       raftImpulseQueue = nextRafts;
@@ -717,6 +723,18 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
     });
   };
 
+  let lastWakeEmission = 0;
+  const emitRaftWakes = (now: number) => {
+    if (!activeRafts.length || now - lastWakeEmission < 140) return;
+    lastWakeEmission = now;
+    activeRafts.forEach((raft) => {
+      const force = 0.003 + raft.strength * 0.002;
+      splat(raft.x, raft.y, 0.0, force, 0.008);
+      splat(raft.x - 0.022, raft.y - 0.01, force * 0.24, force * 0.34, 0.005);
+      splat(raft.x + 0.022, raft.y - 0.01, -force * 0.24, force * 0.34, 0.005);
+    });
+  };
+
   const step = (dt: number) => {
     if (!velocity || !divergence || !curl || !pressure) return;
     gl.disable(gl.BLEND);
@@ -811,6 +829,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
         lastImpulse = now;
       }
       emitRaftImpulses();
+      emitRaftWakes(now);
       step(dt);
       draw(displayProgram!, null, () => {
         bindTexture(velocity!.read.texture, 0, uniforms.display.u_velocity);
