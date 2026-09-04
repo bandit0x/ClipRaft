@@ -167,7 +167,7 @@ function RaftCard({ card, imageSrc, index, removing, selected, isTauri, onNative
         <div className="raft-rope rope-bottom" />
         <div className="raft-rails" aria-hidden="true" />
         <div className={`modality-badge badge-${card.kind}`}><Icon name={card.kind} size={14} /></div>
-        <button className="raft-content" draggable={!removing} onClick={() => onSelect(card.id)} onDoubleClick={() => onRestore(card.id)} aria-label={`恢复${card.preview}`}>
+        <button className="raft-content" draggable={!removing && !isTauri} onClick={() => onSelect(card.id)} onDoubleClick={() => onRestore(card.id)} aria-label={`恢复${card.preview}`}>
           {card.kind === "image" && <div className="image-preview">{imageSrc ? <img src={imageSrc} alt="" draggable={false} /> : <><span className="sun" /><span className="mountain mountain-back" /><span className="mountain mountain-front" /><span className="lake-line" /></>}</div>}
           {card.kind === "file" && <div className="file-preview"><span className="file-tab" /><span className="zip-mark">ZIP</span></div>}
           <div className="paper">
@@ -209,15 +209,34 @@ function App() {
   const [expanded, setExpanded] = useState(!isTauriEnv());
   const undoTimerRef = useRef<number | null>(null);
   const autoCollapseTimerRef = useRef<number | null>(null);
+  const collapseTimerRef = useRef<number | null>(null);
+  const ghostActiveRef = useRef(false);
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const trashBayRef = useRef<HTMLButtonElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const refs = useRef(new Map<string, HTMLDivElement>());
   const worldRef = useRef<HTMLDivElement>(null);
   const [raftAnchors, setRaftAnchors] = useState<FluidRaft[]>([]);
-  const [ghost, setGhost] = useState<{ label: string; x: number; y: number } | null>(null);
+  const [ghost, setGhost] = useState<{ label: string; x: number; y: number; card: ClipCard } | null>(null);
 
   const clearAutoCollapse = useCallback(() => {
     if (autoCollapseTimerRef.current) window.clearTimeout(autoCollapseTimerRef.current);
     autoCollapseTimerRef.current = null;
+  }, []);
+
+  const collapsePanel = useCallback(() => {
+    setExpanded(false);
+    void invoke("set_panel_expanded", { expanded: false }).catch(() => undefined);
+  }, []);
+
+  // 展开态鼠标离开面板：延迟自动收起（幽灵拖拽期间不打断）
+  const scheduleCollapse = useCallback(() => {
+    if (collapseTimerRef.current) window.clearTimeout(collapseTimerRef.current);
+    collapseTimerRef.current = window.setTimeout(() => collapsePanel(), 1400);
+  }, [collapsePanel]);
+  const cancelCollapse = useCallback(() => {
+    if (collapseTimerRef.current) window.clearTimeout(collapseTimerRef.current);
+    collapseTimerRef.current = null;
   }, []);
 
   const openPanel = useCallback((peek = false) => {
@@ -435,13 +454,25 @@ function App() {
   const startNativeDrag = useCallback(
     (card: ClipCard, origin: { x: number; y: number }) => {
       setNotice("拖动中：松手粘贴到光标下的窗口");
-      setGhost({ label: card.preview.slice(0, 26), x: origin.x, y: origin.y });
+      setGhost({ label: card.preview.slice(0, 26), x: origin.x, y: origin.y, card });
       const move = (event: PointerEvent) => {
         setGhost((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current));
       };
       const done = () => {
         window.removeEventListener("pointermove", move);
+        ghostActiveRef.current = false;
         setGhost(null);
+        // 松手在面板内：若落在删除区（漩涡）则删除该卡
+        const p = lastPointerRef.current;
+        const bay = trashBayRef.current;
+        if (p && bay) {
+          const r = bay.getBoundingClientRect();
+          if (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) {
+            void deleteCard(card.id);
+            setNotice("木筏已拖入漩涡删除");
+            return;
+          }
+        }
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", done, { once: true });
@@ -450,7 +481,7 @@ function App() {
         done();
       });
     },
-    [],
+    [deleteCard],
   );
 
   // F9：把最新木筏直接粘贴到光标下的窗口（免拖动）
@@ -475,7 +506,7 @@ function App() {
 
   return (
     <main className={`app-shell${isTauri ? "" : " browser-preview"}`}>
-      <div ref={worldRef} className={`creek-world ${expanded ? "" : "is-collapsed"}`} aria-label="ClipRaft 剪贴板面板" onMouseEnter={holdPanelOpen}>
+      <div ref={worldRef} className={`creek-world ${expanded ? "" : "is-collapsed"}`} aria-label="ClipRaft 剪贴板面板" onMouseEnter={() => { cancelCollapse(); holdPanelOpen(); }} onMouseLeave={() => { if (expanded && !ghostActiveRef.current) scheduleCollapse(); }}>
         {!expanded && <button className="edge-handle" onClick={() => openPanel()} aria-label="打开 ClipRaft"><span /></button>}
         {expanded && <FlowBackdrop rafts={raftAnchors} />}
         <div className="water-photo-material" aria-hidden="true" />
@@ -496,7 +527,8 @@ function App() {
           )) : <div className="empty-water">水面很安静<br /><span>复制一点内容，让木筏靠岸</span></div>}
         </section>
 
-        {draggingId && <button
+        {(draggingId || ghost) && <button
+          ref={trashBayRef}
           className={`trash-bay ${draggingOverTrash ? "is-hovered" : ""}`}
           onDragOver={(event) => { event.preventDefault(); setDraggingOverTrash(true); }}
           onDragLeave={() => setDraggingOverTrash(false)}

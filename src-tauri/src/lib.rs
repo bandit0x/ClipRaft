@@ -900,7 +900,7 @@ impl ClipboardHandler for ClipboardChangeHandler {
 
 fn expand_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = set_panel_width(&window, 216.0);
+        let _ = set_panel_width(&window, 184.0);
         let _ = dock_window(&window);
         let _ = window.show();
         let _ = window.unminimize();
@@ -1130,12 +1130,6 @@ async fn start_clip_drag_monitor(id: String, app: AppHandle) -> Result<(), Strin
     }
 
     std::thread::spawn(move || {
-        let debug_log = |message: &str| {
-            let _ = std::fs::write(
-                "D:\\zcode\\projects\\copy-plate\\.scratch\\drag-debug.log",
-                format!("{}\n", message),
-            );
-        };
         // 等待左键释放（上限 15 秒防挂死），期间持续跟踪全局光标
         let mut last = POINT { x: 0, y: 0 };
         let start = Instant::now();
@@ -1152,7 +1146,6 @@ async fn start_clip_drag_monitor(id: String, app: AppHandle) -> Result<(), Strin
                 break;
             }
         }
-        debug_log(&format!("released at {},{}", last.x, last.y));
 
         let point = POINT { x: last.x, y: last.y };
         let target = unsafe { WindowFromPoint(point) };
@@ -1172,101 +1165,15 @@ async fn start_clip_drag_monitor(id: String, app: AppHandle) -> Result<(), Strin
 
         let context = match ClipboardContext::new() {
             Ok(context) => context,
-            Err(error) => {
-                debug_log(&format!("clipboard open failed: {error}"));
-                return;
-            }
+            Err(_) => return,
         };
-        if let Err(error) = context.set(contents) {
-            debug_log(&format!("clipboard set failed: {error}"));
+        if context.set(contents).is_err() {
             return;
         }
         thread::sleep(Duration::from_millis(120));
-        debug_log("paste input sent");
-        send_paste_input();
+        let _ = send_paste_input();
     });
     Ok(())
-}
-
-/// 把卡片内容写入剪贴板，聚焦松手位置下的目标窗口并发送 Ctrl+V，
-/// 实现「拖到哪个窗口就粘贴到哪个窗口」。
-#[tauri::command]
-async fn paste_clip_at_cursor(id: String, app: AppHandle) -> Result<(), String> {
-    let debug_log = |message: &str| {
-        let _ = std::fs::write(
-            "D:\\zcode\\projects\\copy-plate\\.scratch\\drag-debug.log",
-            format!("{}\n", message),
-        );
-    };
-    debug_log("paste_clip_at_cursor entered");
-    let state: State<AppState> = app.state();
-    let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
-    let (hash, contents) = contents_from_payload(payload)?;
-    debug_log("payload loaded");
-
-    {
-        let mut ignored = state
-            .ignored_hashes
-            .lock()
-            .map_err(|_| "ignore lock poisoned".to_string())?;
-        ignored.insert(hash.clone(), Instant::now());
-    }
-    let context = ClipboardContext::new().map_err(|error| error.to_string())?;
-    if let Err(error) = context.set(contents) {
-        if let Ok(mut ignored) = state.ignored_hashes.lock() {
-            ignored.remove(&hash);
-        }
-        return Err(error.to_string());
-    }
-
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
-    let cursor = window
-        .cursor_position()
-        .map_err(|error| error.to_string())?;
-    let point = POINT {
-        x: cursor.x as i32,
-        y: cursor.y as i32,
-    };
-    let target = unsafe { WindowFromPoint(point) };
-    let target_root = unsafe { GetAncestor(target, GA_ROOT) };
-    let our_hwnd = window
-        .hwnd()
-        .map(|handle| handle.0)
-        .unwrap_or(std::ptr::null_mut());
-    debug_log(&format!(
-        "cursor=({},{}) target={:?} root={:?} our={:?}",
-        point.x, point.y, target, target_root, our_hwnd
-    ));
-    if target_root == our_hwnd || target as isize == our_hwnd as isize {
-        let message = "落点在 ClipRaft 自己的水面上，没有可粘贴的目标";
-        debug_log(message);
-        return Err(message.to_string());
-    }
-    if unsafe { SetForegroundWindow(target_root) } == 0 {
-        let message = "目标窗口拒绝了焦点";
-        debug_log(message);
-        return Err(message.to_string());
-    }
-    thread::sleep(Duration::from_millis(140));
-    // 在落点补一次左键点击：让目标可编辑区拿到焦点与光标，Ctrl+V 才有落点
-    unsafe {
-        SetCursorPos(point.x, point.y);
-    }
-    thread::sleep(Duration::from_millis(80));
-    const LEFTDOWN: u32 = 0x0002;
-    const LEFTUP: u32 = 0x0004;
-    unsafe {
-        mouse_event(LEFTDOWN, 0, 0, 0, usize::default());
-    }
-    thread::sleep(Duration::from_millis(50));
-    unsafe {
-        mouse_event(LEFTUP, 0, 0, 0, usize::default());
-    }
-    thread::sleep(Duration::from_millis(160));
-    debug_log("sending paste input");
-    send_paste_input()
 }
 
 /// 把剪贴卡片导出为可拖出的真实文件列表（浏览器预览/调试用）。
@@ -1410,7 +1317,7 @@ fn set_panel_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
     if expanded {
-        set_panel_width(&window, 216.0)?;
+        set_panel_width(&window, 184.0)?;
     } else {
         collapse_window(&window)?;
     }
@@ -1428,7 +1335,7 @@ pub fn run() {
                 .map_err(|error| format!("ClipRaft data directory failed: {error}"))?;
             app.manage(AppState::open(&data_dir)?);
             if let Some(window) = app.get_webview_window("main") {
-                set_panel_width(&window, 216.0)?;
+                collapse_window(&window)?;
                 dock_window(&window)?;
                 let close_target = window.clone();
                 window.on_window_event(move |event| {
@@ -1450,7 +1357,7 @@ pub fn run() {
             set_clip_pinned,
             image_preview_data_url,
             export_clip_paths,
-            paste_clip_at_cursor,
+            start_clip_drag_monitor,
 
             restore_clip,
             clear_history,
