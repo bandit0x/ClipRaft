@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { DragEvent, MutableRefObject } from "react";
+import type { DragEvent, MutableRefObject, PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import { mountFluidSurface, type FluidRaft } from "./flow/WebGLFluidBackdrop";
+
+// 惰性判定：模块加载瞬间 __TAURI_INTERNALS__ 可能尚未注入（时序竞态），
+// 挂载后由 effect 校正一次。
+function isTauriEnv() {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 type Modality = "text" | "image" | "file";
 
@@ -47,6 +53,7 @@ function FlowBackdrop({ rafts }: { rafts: FluidRaft[] }) {
     if (!canvas) return;
     const controller = mountFluidSurface(canvas);
     controllerRef.current = controller;
+    if (!controller.active) console.warn("[ClipRaft] 流体画布未激活，回退到静态水材质");
     return () => {
       controller.cleanup();
       controllerRef.current = null;
@@ -59,6 +66,13 @@ function FlowBackdrop({ rafts }: { rafts: FluidRaft[] }) {
 
   return <canvas ref={canvasRef} className="flow-backdrop" aria-hidden="true" />;
 }
+
+const browserPreviewCards: ClipCard[] = [
+  { id: "preview-text-1", kind: "text", preview: "视觉瓶先行", detail: "文本 · 12 字", copiedAt: "10:21", useCount: 3, pinned: false },
+  { id: "preview-image-1", kind: "image", preview: "湖畔远足.png", detail: "PNG · 1920×1080", copiedAt: "10:22", useCount: 1, pinned: true },
+  { id: "preview-file-1", kind: "file", preview: "考古.zip", detail: "ZIP · 34.4 MB", copiedAt: "10:24", useCount: 0, pinned: false },
+  { id: "preview-text-2", kind: "text", preview: "会议纪要：下游排期对齐", detail: "文本 · 236 字", copiedAt: "09:58", useCount: 2, pinned: false },
+];
 
 function readTime(value: string) {
   if (/^\d+$/.test(value)) return new Date(Number(value) * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -94,38 +108,66 @@ function useRaftMotion(cards: ClipCard[], refs: MutableRefObject<Map<string, HTM
   }, [cards, refs]);
 }
 
-function RaftCard({ card, imageSrc, index, removing, selected, onSelect, onDelete, onRestore, onTogglePin, onDragStart, onDragEnd, setRef }: {
+function RaftCard({ card, imageSrc, index, removing, selected, isTauri, onNativeDrag, onSelect, onDelete, onRestore, onTogglePin, onDragStart, onDragEnd, setRef }: {
   card: ClipCard;
   imageSrc?: string;
   index: number;
   removing: boolean;
   selected: boolean;
+  isTauri: boolean;
+  onNativeDrag: (card: ClipCard, origin: { x: number; y: number }) => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onRestore: (id: string) => void;
   onTogglePin: (id: string) => void;
-  onDragStart: (id: string) => void;
+  onDragStart: (event: DragEvent<HTMLElement>, card: ClipCard, imageSrc?: string) => void;
   onDragEnd: () => void;
   setRef: (element: HTMLDivElement | null) => void;
 }) {
+  const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    dragOriginRef.current = { x: event.clientX, y: event.clientY };
+    // 捕获指针：光标移出木筏后 pointermove 仍回传本元素，否则拖动阈值无法跨过
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* 某些指针类型不支持捕获，忽略 */
+    }
+    const badge = event.currentTarget.ownerDocument.querySelector(".status-strip > span:nth-child(2)");
+    if (badge) badge.textContent = "①已按下木筏";
+  };
+  const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const origin = dragOriginRef.current;
+    if (!origin) return;
+    const badge = event.currentTarget.ownerDocument.querySelector(".status-strip > span:nth-child(2)");
+    if (badge) badge.textContent = "②拖动中 " + Math.round(Math.hypot(event.clientX - origin.x, event.clientY - origin.y)) + "px";
+    if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 8) {
+      dragOriginRef.current = null;
+      onNativeDrag(card, origin);
+    }
+  };
   return (
     <div className="raft-motion" ref={setRef}>
-      <div className={`raft-wake wake-${index % 3}`} aria-hidden="true"><span /><span /><span /></div>
       <article
         className={`raft-card raft-${card.kind} raft-tilt-${index % 3} ${selected ? "is-selected" : ""} ${card.pinned ? "is-pinned" : ""} ${removing ? "is-removing" : ""}`}
         tabIndex={0}
         aria-selected={selected}
-        draggable={!removing}
+        draggable={!removing && !isTauri}
         onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) onSelect(card.id); }}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onRestore(card.id); } }}
-        onDragStart={() => onDragStart(card.id)}
+        onPointerDown={isTauri ? onPointerDown : undefined}
+        onPointerMove={isTauri ? onPointerMove : undefined}
+        onPointerUp={() => { dragOriginRef.current = null; }}
+        onPointerCancel={() => { dragOriginRef.current = null; }}
+        onDragStart={(event) => onDragStart(event, card, imageSrc)}
         onDragEnd={onDragEnd}
       >
         <div className="raft-rope rope-top" />
         <div className="raft-rope rope-bottom" />
         <div className="raft-rails" aria-hidden="true" />
-        <div className={`modality-badge badge-${card.kind}`}><Icon name={card.kind} size={12} /></div>
-        <button className="raft-content" onClick={() => onSelect(card.id)} onDoubleClick={() => onRestore(card.id)} aria-label={`恢复${card.preview}`}>
+        <div className={`modality-badge badge-${card.kind}`}><Icon name={card.kind} size={14} /></div>
+        <button className="raft-content" draggable={!removing} onClick={() => onSelect(card.id)} onDoubleClick={() => onRestore(card.id)} aria-label={`恢复${card.preview}`}>
           {card.kind === "image" && <div className="image-preview">{imageSrc ? <img src={imageSrc} alt="" draggable={false} /> : <><span className="sun" /><span className="mountain mountain-back" /><span className="mountain mountain-front" /><span className="lake-line" /></>}</div>}
           {card.kind === "file" && <div className="file-preview"><span className="file-tab" /><span className="zip-mark">ZIP</span></div>}
           <div className="paper">
@@ -145,10 +187,17 @@ function RaftCard({ card, imageSrc, index, removing, selected, onSelect, onDelet
 }
 
 function App() {
+  // 先按模块期判定渲染，挂载后用 effect 校正一次（防注入时序竞态）
+  const [isTauri, setIsTauri] = useState(isTauriEnv());
+  useEffect(() => {
+    setIsTauri(isTauriEnv());
+  }, []);
   const [cards, setCards] = useState<ClipCard[]>([]);
   const [query, setQuery] = useState("");
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("复制内容会在这里顺流靠岸");
+  const [notice, setNotice] = useState(
+    isTauri ? "桌面模式：按住木筏拖到目标窗口" : "浏览器预览：拖出功能需桌面应用",
+  );
   const [autoPaste, setAutoPaste] = useState(true);
   const [historyPersistence, setHistoryPersistence] = useState(true);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
@@ -156,13 +205,15 @@ function App() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingOverTrash, setDraggingOverTrash] = useState(false);
   const [undoableId, setUndoableId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  // 浏览器预览（无 Tauri）直接以展开态打开，方便查看 UI；桌面窗口保持收起启动
+  const [expanded, setExpanded] = useState(!isTauriEnv());
   const undoTimerRef = useRef<number | null>(null);
   const autoCollapseTimerRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const refs = useRef(new Map<string, HTMLDivElement>());
   const worldRef = useRef<HTMLDivElement>(null);
   const [raftAnchors, setRaftAnchors] = useState<FluidRaft[]>([]);
+  const [ghost, setGhost] = useState<{ label: string; x: number; y: number } | null>(null);
 
   const clearAutoCollapse = useCallback(() => {
     if (autoCollapseTimerRef.current) window.clearTimeout(autoCollapseTimerRef.current);
@@ -193,6 +244,7 @@ function App() {
       setCards(next);
     } catch {
       // Browser preview intentionally keeps the visual comp usable without Tauri.
+      if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) setCards(browserPreviewCards);
     }
   }, []);
 
@@ -231,6 +283,7 @@ function App() {
 
   useEffect(() => {
     refresh();
+    if (!isTauri) return;
     let unlisten: (() => void) | undefined;
     let unlistenDrop: (() => void) | undefined;
     let unlistenPanel: (() => void) | undefined;
@@ -260,7 +313,6 @@ function App() {
     }).then((cleanup) => { unlistenDrop = cleanup; }).catch(() => undefined);
     return () => { unlisten?.(); unlistenDrop?.(); unlistenPanel?.(); };
   }, [holdPanelOpen, openPanel, refresh]);
-
   useRaftMotion(cards, refs);
 
   const visibleCards = cards.filter((card) => `${card.preview} ${card.detail}`.toLowerCase().includes(query.toLowerCase()));
@@ -358,15 +410,62 @@ function App() {
     setNotice(next ? "已开启自动粘贴" : "已关闭自动粘贴，仅复制");
   };
 
-  const handleDragStart = (id: string) => {
-    setDraggingId(id);
+  const handleDragStart = (event: DragEvent<HTMLElement>, card: ClipCard, imageSrc?: string) => {
+    event.dataTransfer.clearData();
+    event.dataTransfer.effectAllowed = "copyMove";
+    event.dataTransfer.setData("application/x-clipraft-id", card.id);
+    if (card.kind === "image" && imageSrc) {
+      event.dataTransfer.setData("text/html", `<img src="${imageSrc}" alt="${card.preview}">`);
+      event.dataTransfer.setData("DownloadURL", `image/png:clipraft-${card.id}.png:${imageSrc}`);
+    }
+    event.dataTransfer.setData("text/plain", card.preview);
+    setDraggingId(card.id);
     setDraggingOverTrash(false);
+    void invoke("restore_clip", { id: card.id, autoPaste: false })
+      .catch(() => setNotice("拖出内容准备失败"));
   };
 
   const handleDragEnd = () => {
     setDraggingId(null);
     setDraggingOverTrash(false);
   };
+
+  /** 拖出：木筏影子跟手；越阈值即交 Rust 后台监视（光标跟踪 + 左键释放粘贴），
+      此后不再依赖 WebView2 的指针事件（跨窗口会断流） */
+  const startNativeDrag = useCallback(
+    (card: ClipCard, origin: { x: number; y: number }) => {
+      setNotice("拖动中：松手粘贴到光标下的窗口");
+      setGhost({ label: card.preview.slice(0, 26), x: origin.x, y: origin.y });
+      const move = (event: PointerEvent) => {
+        setGhost((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current));
+      };
+      const done = () => {
+        window.removeEventListener("pointermove", move);
+        setGhost(null);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", done, { once: true });
+      void invoke("start_clip_drag_monitor", { id: card.id }).catch((error) => {
+        setNotice("拖出失败：" + String(error));
+        done();
+      });
+    },
+    [],
+  );
+
+  // F9：把最新木筏直接粘贴到光标下的窗口（免拖动）
+  useEffect(() => {
+    if (!isTauri) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "F9" && cards.length) {
+        void invoke("start_clip_drag_monitor", { id: cards[0].id }).catch((error) => {
+          setNotice("拖出失败：" + String(error));
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cards]);
 
   const handleTrashDrop = (event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -375,14 +474,11 @@ function App() {
   };
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${isTauri ? "" : " browser-preview"}`}>
       <div ref={worldRef} className={`creek-world ${expanded ? "" : "is-collapsed"}`} aria-label="ClipRaft 剪贴板面板" onMouseEnter={holdPanelOpen}>
         {!expanded && <button className="edge-handle" onClick={() => openPanel()} aria-label="打开 ClipRaft"><span /></button>}
         {expanded && <FlowBackdrop rafts={raftAnchors} />}
         <div className="water-photo-material" aria-hidden="true" />
-        <div className="water-caustic-layer" aria-hidden="true" />
-        <div className="water-highlight highlight-one" />
-        <div className="water-highlight highlight-two" />
         <div className="bank-stone stone-one" />
         <div className="bank-stone stone-two" />
 
@@ -396,7 +492,7 @@ function App() {
 
         <section className="history-stream" aria-live="polite">
           {visibleCards.length ? visibleCards.map((card, index) => (
-            <RaftCard key={card.id} card={card} imageSrc={imagePreviews[card.id]} index={index} removing={removingId === card.id} selected={selectedId === card.id} onSelect={setSelectedId} onDelete={deleteCard} onRestore={restoreCard} onTogglePin={(id) => void togglePinned(id)} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
+            <RaftCard key={card.id} card={card} imageSrc={imagePreviews[card.id]} index={index} removing={removingId === card.id} selected={selectedId === card.id} isTauri={isTauri} onNativeDrag={(target, origin) => void startNativeDrag(target, origin)} onSelect={setSelectedId} onDelete={deleteCard} onRestore={restoreCard} onTogglePin={(id) => void togglePinned(id)} onDragStart={handleDragStart} onDragEnd={handleDragEnd} setRef={(element) => { if (element) refs.current.set(card.id, element); else refs.current.delete(card.id); }} />
           )) : <div className="empty-water">水面很安静<br /><span>复制一点内容，让木筏靠岸</span></div>}
         </section>
 
@@ -419,6 +515,7 @@ function App() {
           {undoableId && <button className="undo-action" onClick={() => void undoDelete()}>撤销</button>}
           <button className={`auto-paste ${autoPaste ? "is-on" : ""}`} aria-pressed={autoPaste} onClick={() => void toggleAutoPaste()}>{autoPaste ? "自动粘贴" : "仅复制"}</button>
         </div>
+        {ghost && <div className="drag-ghost" style={{ left: ghost.x + 14, top: ghost.y + 12 }}>{ghost.label}</div>}
       </div>
     </main>
   );

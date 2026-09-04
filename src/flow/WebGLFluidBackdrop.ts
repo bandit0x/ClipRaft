@@ -1,5 +1,8 @@
 // Adapted from PavelDoGreat/WebGL-Fluid-Simulation (MIT).
 // Source: https://github.com/PavelDoGreat/WebGL-Fluid-Simulation
+// Fresnel / sun specular structure adapted from three.js Water.js (MIT):
+// https://github.com/mrdoob/three.js/blob/dev/examples/jsm/objects/Water.js
+// Caustics approximated from the area-ratio technique in evanw/webgl-water (technique reference only, no license).
 
 type RenderTarget = {
   fbo: WebGLFramebuffer;
@@ -27,6 +30,7 @@ export type FluidRaft = {
 type FluidSurfaceController = {
   setRafts: (rafts: FluidRaft[]) => void;
   cleanup: () => void;
+  active: boolean;
 };
 
 const vertexSource = `#version 300 es
@@ -218,24 +222,16 @@ const displaySource = `#version 300 es
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
 
-  vec2 hash2(vec2 p) {
-    return fract(sin(vec2(
-      dot(p, vec2(127.1, 311.7)),
-      dot(p, vec2(269.5, 183.3))
-    )) * 43758.5453123);
-  }
-
-  float noise(vec2 p) {
-    vec2 i = floor(p);
+  float noise(vec2 p) {    vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
   }
 
-  float fbm(vec2 p) {
+  float fbm3(vec2 p) {
     float value = 0.0;
     float amplitude = 0.5;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
       value += amplitude * noise(p);
       p = p * 2.03 + vec2(7.1, 3.7);
       amplitude *= 0.5;
@@ -243,35 +239,40 @@ const displaySource = `#version 300 es
     return value;
   }
 
-  vec2 smoothVelocity(vec2 uv) {
-    vec2 texel = u_velocity_texel_size;
-    vec2 velocity = texture(u_velocity, clamp(uv, 0.001, 0.999)).xy * 0.28;
-    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, 0.0), 0.001, 0.999)).xy * 0.11;
-    velocity += texture(u_velocity, clamp(uv - vec2(texel.x, 0.0), 0.001, 0.999)).xy * 0.11;
-    velocity += texture(u_velocity, clamp(uv + vec2(0.0, texel.y), 0.001, 0.999)).xy * 0.11;
-    velocity += texture(u_velocity, clamp(uv - vec2(0.0, texel.y), 0.001, 0.999)).xy * 0.11;
-    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, texel.y), 0.001, 0.999)).xy * 0.0675;
-    velocity += texture(u_velocity, clamp(uv + vec2(texel.x, -texel.y), 0.001, 0.999)).xy * 0.0675;
-    velocity += texture(u_velocity, clamp(uv + vec2(-texel.x, texel.y), 0.001, 0.999)).xy * 0.0675;
-    velocity += texture(u_velocity, clamp(uv - vec2(texel.x, texel.y), 0.001, 0.999)).xy * 0.0675;
-    return velocity;
+  // 解析波面：八列短碎波叠加（three.js Ocean 多波列思路的解析版）。
+  // 波向偏斜、能量集中在中小波长（32–90px）——长波幅值过大时
+  // 波峰会横贯面板荡成「拱」（已被否）。相位速度即真实像素速度
+  // （14–29px/s 向下游）。返回 vec4(h, dh/dx, dh/dy, lap)：
+  // 解析导数，法线与焦散都不需要额外采样。
+  vec4 waveField(vec2 p, float rt) {
+    float h = 0.0;
+    float dx = 0.0;
+    float dy = 0.0;
+    float lap = 0.0;
+    float q;
+    vec2 k;
+    float a;
+    k = vec2(0.020, 0.055);  a = 0.18; q = dot(p, k) - rt * 1.05;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(-0.025, 0.081); a = 0.22; q = dot(p, k) - rt * 1.85;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(0.030, 0.125);  a = 0.20; q = dot(p, k) - rt * 3.20;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(-0.018, 0.194); a = 0.14; q = dot(p, k) - rt * 5.60;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(0.048, 0.052);  a = 0.14; q = dot(p, k) - rt * 1.00;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(-0.038, 0.048); a = 0.12; q = dot(p, k) - rt * 1.10;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(0.070, 0.090);  a = 0.08; q = dot(p, k) - rt * 2.96;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    k = vec2(-0.062, 0.085); a = 0.07; q = dot(p, k) - rt * 2.10;  h += a * sin(q); dx += a * k.x * cos(q); dy += a * k.y * cos(q); lap -= a * dot(k, k) * sin(q);
+    return vec4(h, dx, dy, lap);
   }
 
-  float riverCenter(float y, float time) {
-    float slowBend = sin(y * 4.3 + sin(time * 0.55 + y * 1.2) * 0.65 + time * 0.05) * 0.045;
-    float smallBend = sin(y * 9.0 - time * 0.18) * 0.014;
-    return 0.5 + slowBend + smallBend;
-  }
-
+  // 涟漪环只属于木筏：从船舷半径起波，扩到约一倍船长后消散
   float raftRipple(vec2 uv, vec3 raft, float time) {
     vec2 delta = (uv - raft.xy) * u_resolution;
     delta.x *= 1.08;
     float radius = length(delta / vec2(1.0, 1.28));
-    float ringProgress = fract((time * 28.0 + raft.z * 24.0) / 124.0);
-    float ringRadius = 16.0 + ringProgress * 124.0;
-    float ringWidth = 1.5 + ringRadius * 0.016;
-    float ringLife = smoothstep(0.0, 0.08, ringProgress) * (1.0 - smoothstep(0.68, 1.0, ringProgress));
-    float ring = exp(-pow(abs(radius - ringRadius) / ringWidth, 2.0)) * exp(-ringRadius * 0.009) * ringLife * raft.z;
+    float ringProgress = fract((time * 22.0 + raft.z * 24.0) / 100.0);
+    float ringRadius = 48.0 + ringProgress * 52.0;
+    float ringWidth = 1.5 + ringRadius * 0.02;
+    float ringLife = smoothstep(0.0, 0.08, ringProgress) * (1.0 - smoothstep(0.62, 1.0, ringProgress));
+    float ring = smoothstep(ringWidth, 0.0, abs(radius - ringRadius)) * exp(-ringRadius * 0.012) * ringLife * raft.z;
 
     float downstream = max(-delta.y, 0.0);
     float wakeSpread = 8.0 + downstream * 0.115;
@@ -279,7 +280,7 @@ const displaySource = `#version 300 es
     float wake = (1.0 - smoothstep(0.0, wakeSpread, wakeAxis)) * exp(-downstream * 0.011);
     float wakeWave = 0.5 + 0.5 * sin(downstream * 0.17 - time * 2.5 + sin(delta.x * 0.035) * 1.1);
     float bow = exp(-length(delta / vec2(13.0, 8.0))) * 0.62;
-    return ring * 0.48 + wake * wakeWave * 0.42 + bow;
+    return ring * 0.85 + wake * wakeWave * 0.42 + bow;
   }
 
   float raftRippleField(vec2 uv, float time) {
@@ -290,143 +291,35 @@ const displaySource = `#version 300 es
     return field;
   }
 
-  float raftWaveRing(vec2 uv, vec3 raft, float time) {
-    vec2 delta = (uv - raft.xy) * u_resolution;
-    float radius = length(delta / vec2(1.0, 1.28));
-    float ringProgress = fract((time * 32.0 + raft.z * 30.0) / 138.0);
-    float ringRadius = 18.0 + ringProgress * 138.0;
-    float ringWidth = 2.0 + ringRadius * 0.024;
-    float angle = atan(delta.x, delta.y);
-    float wobble = 1.0 + 0.08 * sin(angle * 3.0 + time * 1.1) + 0.045 * sin(angle * 5.0 - time * 0.7);
-    float ring = exp(-pow(abs(radius / wobble - ringRadius) / ringWidth, 2.0));
-    float ringNoise = fbm(vec2(angle * 2.4 + time * 0.12, radius * 0.022 - time * 0.08));
-    float breakup = 0.3 + 0.7 * smoothstep(0.4, 0.72, ringNoise);
-    float ringLife = smoothstep(0.0, 0.08, ringProgress) * (1.0 - smoothstep(0.66, 1.0, ringProgress));
-    return ring * breakup * exp(-ringRadius * 0.008) * ringLife * raft.z;
-  }
-
-  float raftWaveRingField(vec2 uv, float time) {
-    float field = 0.0;
-    for (int index = 0; index < 6; index++) {
-      if (index < u_raft_count) field = max(field, raftWaveRing(uv, u_raft_points[index], time));
-    }
-    return field;
-  }
-
-  vec2 flowCoordinates(vec2 uv, float time) {
-    vec2 localVelocity = smoothVelocity(uv);
-    float center = riverCenter(uv.y, time * 0.7);
-    vec2 p = vec2((uv.x - center) * 72.0 + uv.y * 7.6, uv.y * 118.0);
-    p += localVelocity * vec2(0.42, -0.32);
-    vec2 warp = vec2(
-      fbm(p * 0.42 + vec2(-time * 0.08, time * 0.04)),
-      fbm(p * 0.42 + vec2(5.3 + time * 0.06, 2.1 - time * 0.05))
-    ) - 0.5;
-    vec2 microWarp = vec2(
-      fbm(p * 0.38 + vec2(time * 0.13, -time * 0.09)),
-      fbm(p * 0.38 + vec2(4.2 - time * 0.1, 1.8 + time * 0.07))
-    ) - 0.5;
-    return p + warp * vec2(0.86, 0.52) + microWarp * vec2(0.32, 0.18);
-  }
-
-  float surfaceHeight(vec2 uv, float time) {
-    vec2 p = flowCoordinates(uv, time);
-    vec2 flow = smoothVelocity(uv);
-    float flowLift = dot(flow, vec2(1.2, -0.8));
-    float broad = sin(p.x * 1.35 + p.y * 0.46 - time * 1.15 + sin(p.y * 0.74 - time * 0.5) * 0.72 + flowLift * 0.9);
-    float middle = sin(p.x * 3.6 - p.y * 0.83 - time * 1.8 + sin(p.y * 1.2 + p.x * 0.7) * 0.45 + flowLift * 0.55);
-    float fine = sin(p.x * 6.8 + p.y * 2.1 - time * 2.6 + flowLift * 0.32);
-    float raftDisplacement = raftRippleField(uv, time);
-    return broad * 0.012 + middle * 0.005 + fine * 0.0025 + raftDisplacement * 0.012;
-  }
-
-  vec2 surfaceCoordinates(vec2 uv, float time) {
-    vec2 p = uv * vec2(68.0, 116.0) + vec2(-time * 0.12, time * 0.2);
-    vec2 warp = vec2(
-      fbm(uv * vec2(2.2, 2.7) + vec2(-time * 0.04, time * 0.03)),
-      fbm(uv * vec2(1.7, 2.4) + vec2(4.8 + time * 0.03, -1.5 - time * 0.04))
-    ) - 0.5;
-    return p + warp * vec2(0.82, 0.64) + smoothVelocity(uv) * vec2(1.2, 0.86);
-  }
-
-  float caustic(vec2 uv, float time) {
-    vec2 p = surfaceCoordinates(uv, time);
-    float broadField = fbm(p * vec2(0.94, 0.78) + vec2(2.0, -3.4) + vec2(time * 0.09, -time * 0.06));
-    float fineField = fbm(p * vec2(2.15, 1.76) + vec2(-6.2, 4.7) + vec2(-time * 0.14, time * 0.1));
-    float broadRidge = 1.0 - abs(broadField * 2.0 - 1.0);
-    float fineRidge = 1.0 - abs(fineField * 2.0 - 1.0);
-    float breakup = smoothstep(0.36, 0.76, fbm(p * vec2(0.42, 0.34) + vec2(time * 0.025, -time * 0.02)));
-    float broad = smoothstep(0.78, 0.96, broadRidge) * breakup;
-    float fine = smoothstep(0.82, 0.975, fineRidge) * (0.22 + breakup * 0.78);
-    return clamp(broad * 0.48 + fine * 0.42, 0.0, 1.0);
-  }
-
-  float cellularCaustic(vec2 uv, float time, float cellSize, vec2 phase) {
-    vec2 current = smoothVelocity(uv);
-    vec2 p = uv * u_resolution / cellSize;
-    p += phase + vec2(-time * 0.7, time * 1.08);
-    p += current * vec2(0.62, -0.88);
-    p += vec2(
-      sin(p.y * 0.115 + time * 0.36),
-      sin(p.x * 0.16 - time * 0.28)
-    ) * 0.2;
-
-    vec2 cell = floor(p);
-    vec2 local = fract(p);
-    float nearest = 8.0;
-    float secondNearest = 8.0;
-
-    for (int y = -1; y <= 1; y++) {
-      for (int x = -1; x <= 1; x++) {
-        vec2 offset = vec2(float(x), float(y));
-        vec2 point = offset + 0.18 + hash2(cell + offset) * 0.64 - local;
-        float distanceSquared = dot(point, point);
-        if (distanceSquared < nearest) {
-          secondNearest = nearest;
-          nearest = distanceSquared;
-        } else if (distanceSquared < secondNearest) {
-          secondNearest = distanceSquared;
-        }
-      }
-    }
-
-    float edgeDistance = sqrt(secondNearest) - sqrt(nearest);
-    float line = 1.0 - smoothstep(0.035, 0.14, edgeDistance);
-    float glint = smoothstep(0.52, 0.9, hash(cell + floor(local * 2.0)));
-    return line * (0.64 + glint * 0.36);
-  }
-
-  float waterRibbons(vec2 uv, float time) {
-    vec2 p = surfaceCoordinates(uv, time) + vec2(-time * 0.08, time * 0.06);
-    float field = fbm(p * vec2(1.72, 1.38) + vec2(-time * 0.16, time * 0.1));
-    float breakup = fbm(p * vec2(0.58, 0.48) + vec2(2.8 + time * 0.03, -4.1 - time * 0.025));
-    float ridge = 1.0 - abs(field * 2.0 - 1.0);
-    return smoothstep(0.9, 0.99, ridge) * smoothstep(0.42, 0.76, breakup);
-  }
-
-  float surfaceSparkle(vec2 uv, float time) {
-    vec2 p = surfaceCoordinates(uv, time);
-    vec2 q = p * vec2(2.25, 1.78) + vec2(-time * 0.22, time * 0.14);
-    float field = fbm(q + vec2(1.8, -5.4));
-    float breakup = fbm(p * vec2(0.68, 0.5) + vec2(3.2 + time * 0.035, -1.7 - time * 0.025));
-    float ridge = 1.0 - abs(field * 2.0 - 1.0);
-    return smoothstep(0.84, 0.98, ridge) * smoothstep(0.38, 0.76, breakup);
+  // 水底：灰石与沙的多频噪声斑驳。对比度拉出卵石质感，
+  // 但刻意不用 voronoi 单元——规则的细胞状网格已被否掉。
+  vec3 creekBottom(vec2 uv, float time, vec2 refr) {
+    vec2 p = (uv + refr) * u_resolution;
+    float large = noise(p * 0.024 + vec2(0.0, time * 1.08));
+    float medium = noise(p * 0.06 + vec2(13.7, 4.2 + time * 2.7));
+    float fine = noise(p * 0.17 + vec2(7.9, 1.3));
+    float mottle = smoothstep(0.44, 0.55, large * 0.6 + medium * 0.4);
+    vec3 sand = mix(vec3(0.78, 0.77, 0.70), vec3(0.88, 0.87, 0.80), fine);
+    vec3 stone = mix(vec3(0.32, 0.38, 0.40), vec3(0.62, 0.70, 0.72), medium);
+    vec3 bottom = mix(sand, stone, mottle);
+    bottom *= 0.86 + 0.24 * fine;
+    return bottom;
   }
 
   float raftFoam(vec2 uv, vec3 raft, float time) {
     vec2 delta = (uv - raft.xy) * u_resolution;
-    float bow = exp(-length(delta / vec2(20.0, 11.0))) * 0.92;
+    float bow = exp(-length(delta / vec2(20.0, 11.0))) * 0.34;
     float hullRadius = length(delta / vec2(48.0, 63.0));
-    float hullRipple = exp(-pow(abs(hullRadius - 1.0) * 5.0, 2.0)) * 0.56;
+    float hullRipple = exp(-pow(abs(hullRadius - 1.0) * 5.0, 2.0)) * 0.28;
     float downstream = max(-delta.y, 0.0);
     float veeDistance = 8.0 + downstream * 0.13;
     float veeWidth = 2.1 + downstream * 0.012;
     float veeWake = exp(-pow((abs(delta.x) - veeDistance) / veeWidth, 2.0)) * exp(-downstream * 0.012);
     float centerSpread = 9.0 + downstream * 0.08;
     float centerWake = (1.0 - smoothstep(0.0, centerSpread, abs(delta.x))) * exp(-downstream * 0.018);
-    float breakup = 0.46 + 0.54 * fbm(vec2(delta.x * 0.028 + time * 0.06, downstream * 0.02 - time * 0.09));
+    float breakup = 0.46 + 0.54 * fbm3(vec2(delta.x * 0.028 + time * 0.06, downstream * 0.02 - time * 0.09));
     float wakeWave = 0.42 + 0.58 * sin(downstream * 0.18 - time * 1.75 + sin(delta.x * 0.04) * 0.8);
-    float wake = (veeWake * 0.9 + centerWake * 0.24) * (0.42 + 0.58 * wakeWave) * breakup;
+    float wake = (veeWake * 0.36 + centerWake * 0.12) * (0.42 + 0.58 * wakeWave) * breakup;
     return clamp((bow + hullRipple + wake) * raft.z, 0.0, 1.0);
   }
 
@@ -440,34 +333,67 @@ const displaySource = `#version 300 es
 
   void main() {
     vec2 uv = v_uv;
-    float time = u_time * 0.26;
-    float current = riverCenter(uv.y, time * 0.7);
-    float width = 0.46 + sin(uv.y * 3.2 - time * 0.18) * 0.012;
-    float distance_to_current = abs(uv.x - current);
-    float water = 1.0 - smoothstep(width - 0.2, width, distance_to_current);
-    float edge = smoothstep(0.0, 0.1, water);
+    float rt = u_time;
+    float time = rt * 0.26;   // 旧动效（水底斑驳漂移/泡沫/涟漪环）的时间轴
+    vec3 viewDir = normalize(vec3(0.10, -0.10, 1.0));
+    vec3 sunDirection = normalize(vec3(-0.35, 0.88, 1.4));
+    vec3 sunColor = vec3(1.0, 0.98, 0.92);
 
-    vec2 texel = 1.0 / u_resolution;
-    float height = surfaceHeight(uv, time);
-    float height_x = surfaceHeight(uv + vec2(texel.x, 0.0), time);
-    float height_y = surfaceHeight(uv + vec2(0.0, texel.y), time);
-    vec3 normal = normalize(vec3((height - height_x) * 39.0, (height - height_y) * 39.0, 1.0));
-    vec3 light_direction = normalize(vec3(-0.35, 0.88, 1.4));
-    float specular = pow(max(dot(reflect(-light_direction, normal), vec3(0.0, 0.0, 1.0)), 0.0), 25.0) * 0.82;
-    float ripple = raftRippleField(uv, time);
-    float waveRing = raftWaveRingField(uv, time);
+    // 波网只随自身相位速度整体输运；流场位移已完全移除——低分辨率
+    // 流场的缓慢演化会让整片纹理蠕动（用户否决）。木筏对水面的作用
+    // 由涟漪环与泡沫表达，不再位移波网。
+    vec2 px = uv * u_resolution;
+    px.y += (noise(px * vec2(0.016, 0.020) + vec2(0.0, rt * 0.22)) - 0.5) * 10.0;
+    vec4 wave = waveField(px, rt);
+    vec3 normal = normalize(vec3(-wave.y * 16.0, -wave.z * 16.0, 1.0));
+
+    // 木筏涟漪并入法线：环的坡度折射焦散与高光（解析波面接管法线后
+    // 涟漪一度消失，这里必须显式加回）
+    float ringTexel = 2.0 / u_resolution.y;
+    float ring0 = raftRippleField(uv, time);
+    float ringX = raftRippleField(uv + vec2(ringTexel, 0.0), time);
+    float ringY = raftRippleField(uv + vec2(0.0, ringTexel), time);
+    vec2 ringGrad = vec2(ringX - ring0, ringY - ring0) / ringTexel;
+    normal = normalize(vec3(normal.x - ringGrad.x * 9.0, normal.y - ringGrad.y * 9.0, 1.0));
+    vec2 refr = normal.xy;
+
+    // 焦散 = 波面 Laplacian（webgl-water 面积压缩比的解析退化）：
+    // 多列波相长干涉处光线汇聚成细网，随波列整体向下游输运
+    float convergence = clamp(-wave.w / 0.0138, -1.0, 1.0);
+    float caustic = pow(max(convergence, 0.0), 1.4);
+
+    // 水下辐照：均匀光学深度 + 岸边略浅；大尺度色斑已被禁（迷彩）
+    float bank = min(uv.x, 1.0 - uv.x);
+    float depth = mix(0.16, 0.55, smoothstep(0.0, 0.09, bank));
+    vec3 transmission = exp(-vec3(2.4, 0.62, 0.46) * depth);
+
+    vec2 bottomRefr = refr * (0.03 + 0.035 * (1.0 - depth));
+    vec3 bottom = creekBottom(uv, time, bottomRefr);
+    vec3 body = bottom * transmission * (0.80 + 0.85 * caustic) + vec3(0.02, 0.16, 0.18) * depth;
+
+    // PavelDoGreat SHADING：波面朝向调制亮度，给液体体积感
+    body *= clamp(0.55 + 0.5 * normal.z, 0.72, 1.06);
+
+    // three.js Water.js：Schlick 菲涅尔（F0=0.02）+ pow=100 太阳镜面高光
+    float cosTheta = max(dot(normal, viewDir), 0.0);
+    float reflectance = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
+    float spec = pow(max(dot(viewDir, normalize(reflect(-sunDirection, normal))), 0.0), 100.0) * 2.0;
+    vec3 reflection = vec3(0.78, 0.90, 0.92) + sunColor * spec;
+    vec3 color = mix(body, reflection, clamp(reflectance * 8.0, 0.0, 0.9));
+
+    // 水面焦散泛白
+    color += sunColor * caustic * 0.10;
+
+    // 涟漪环亮带（只来自木筏，环的折射部分已并入法线）
+    color += vec3(0.55, 0.60, 0.58) * ring0 * 0.28;
+
+    // 浪花：木筏船首与尾流泡沫，加岸线白沫
     float foam = raftFoamField(uv, time);
-    float ribbons = waterRibbons(uv, time);
-    float sparkle = surfaceSparkle(uv, time);
-    float causticLight = caustic(uv + vec2(ripple * 0.018, ripple * 0.008), time);
-    float fineMesh = cellularCaustic(uv + vec2(ripple * 0.006, 0.0), time, 13.0, vec2(0.0));
-    float microMesh = cellularCaustic(uv, time * 1.14, 8.5, vec2(17.3, -9.6));
+    float shoreFoam = (1.0 - smoothstep(0.004, 0.020, bank)) * (0.55 + 0.45 * noise(vec2(uv.y * 140.0, time * 0.8)));
+    foam = clamp(foam + shoreFoam * 0.7, 0.0, 1.0);
+    color = mix(color, vec3(0.96, 1.0, 0.97), foam * 0.75);
 
-    float movingLight = clamp(causticLight * 0.32 + fineMesh * 0.62 + microMesh * 0.22 + specular * 0.52 + ribbons * 0.2 + sparkle * 0.18, 0.0, 1.0);
-    float interaction = clamp(foam * 1.72 + waveRing * 1.46 + ripple * 0.38, 0.0, 1.0);
-    float effectAlpha = edge * (movingLight * 0.43 + interaction * 0.9);
-    vec3 effectColor = mix(vec3(0.34, 0.82, 0.71), vec3(0.82, 1.0, 0.91), interaction);
-    out_color = vec4(effectColor, clamp(effectAlpha, 0.0, 0.82));
+    out_color = vec4(color, 1.0);
   }
 `;
 
@@ -540,7 +466,7 @@ function destroyTarget(gl: WebGL2RenderingContext, target: RenderTarget) {
 
 export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceController {
   const gl = canvas.getContext("webgl2", { alpha: true, antialias: false, premultipliedAlpha: false });
-  if (!gl || !gl.getExtension("EXT_color_buffer_float")) return { setRafts: () => undefined, cleanup: () => undefined };
+  if (!gl || !gl.getExtension("EXT_color_buffer_float")) return { setRafts: () => undefined, cleanup: () => undefined, active: false };
 
   const splatProgram = createProgram(gl, splatSource);
   const dyeSplatProgram = createProgram(gl, dyeSplatSource);
@@ -553,7 +479,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   const dyeAdvectionProgram = createProgram(gl, dyeAdvectionSource);
   const displayProgram = createProgram(gl, displaySource);
   const programs = [splatProgram, dyeSplatProgram, curlProgram, vorticityProgram, divergenceProgram, pressureProgram, gradientProgram, advectionProgram, dyeAdvectionProgram, displayProgram];
-  if (programs.some((program) => !program)) return { setRafts: () => undefined, cleanup: () => undefined };
+  if (programs.some((program) => !program)) return { setRafts: () => undefined, cleanup: () => undefined, active: false };
 
   const uniforms = {
     splat: getUniforms(gl, splatProgram!, ["u_target", "u_aspect_ratio", "u_point", "u_amount", "u_radius"]),
@@ -570,7 +496,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
 
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
-  if (!vao || !buffer) return { setRafts: () => undefined, cleanup: () => undefined };
+  if (!vao || !buffer) return { setRafts: () => undefined, cleanup: () => undefined, active: false };
 
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -787,7 +713,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
   };
 
   const resize = () => {
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.25);
     canvas.width = Math.max(1, Math.floor(canvas.clientWidth * ratio));
     canvas.height = Math.max(1, Math.floor(canvas.clientHeight * ratio));
     initializeTargets();
@@ -839,6 +765,7 @@ export function mountFluidSurface(canvas: HTMLCanvasElement): FluidSurfaceContro
 
   return {
     setRafts,
+    active: true,
     cleanup: () => {
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();

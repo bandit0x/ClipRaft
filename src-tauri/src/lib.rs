@@ -17,12 +17,14 @@ use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
-use windows_sys::Win32::Foundation::HWND;
+use windows_sys::Win32::Foundation::{HWND, POINT};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VK_V,
+    GetAsyncKeyState, mouse_event, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+    KEYEVENTF_KEYUP, VK_CONTROL, VK_LBUTTON, VK_V,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, IsWindow, SetForegroundWindow,
+    GetAncestor, GetCursorPos, GetForegroundWindow, IsWindow, SetCursorPos, SetForegroundWindow,
+    WindowFromPoint, GA_ROOT,
 };
 
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
@@ -217,7 +219,10 @@ fn paste_to_previous_window(state: &AppState) -> Result<(), String> {
         return Err("previous active window rejected focus".to_string());
     }
     thread::sleep(Duration::from_millis(35));
+    send_paste_input()
+}
 
+fn send_paste_input() -> Result<(), String> {
     let inputs = [
         INPUT {
             r#type: INPUT_KEYBOARD,
@@ -979,14 +984,14 @@ fn start_clipboard_watcher(app: AppHandle) {
             let reader = match ClipboardContext::new() {
                 Ok(reader) => reader,
                 Err(error) => {
-                    eprintln!("ClipRaft clipboard reader failed: {error}");
+                    println!("ClipRaft clipboard reader failed: {error}");
                     return;
                 }
             };
             let mut watcher = match ClipboardWatcherContext::new() {
                 Ok(watcher) => watcher,
                 Err(error) => {
-                    eprintln!("ClipRaft clipboard watcher failed: {error}");
+                    println!("ClipRaft clipboard watcher failed: {error}");
                     return;
                 }
             };
@@ -1032,6 +1037,273 @@ fn image_preview_data_url(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
     state.with_active_store(|store| store.image_preview_data_url(&id))
+}
+
+/// 把卡片内容整理成拖出/粘贴载荷：文件路径列表 + 文本内容。
+fn clip_drag_targets(
+    state: &AppState,
+    id: &str,
+) -> Result<(Vec<PathBuf>, Option<String>), String> {
+    let payload = state.with_active_store(|store| store.payload_by_id(id))?;
+    let mut file_paths: Vec<PathBuf> = Vec::new();
+    let mut image_path: Option<PathBuf> = None;
+    let mut plain_text: Option<String> = None;
+    let mut text_fallback: Vec<(String, String)> = Vec::new();
+
+    for representation in &payload.representations {
+        match representation.format.as_str() {
+            "files" => {
+                if let Some(value) = &representation.text_value {
+                    let stored: Vec<String> =
+                        serde_json::from_str(value).map_err(|error| error.to_string())?;
+                    for path in stored {
+                        if Path::new(&path).exists() {
+                            file_paths.push(PathBuf::from(&path));
+                        }
+                    }
+                }
+            }
+            "image/png" => {
+                if let Some(path) = &representation.resource_path {
+                    if Path::new(path).exists() && image_path.is_none() {
+                        image_path = Some(PathBuf::from(path));
+                    }
+                }
+            }
+            "text/plain" => {
+                if let Some(value) = &representation.text_value {
+                    if !value.trim().is_empty() {
+                        plain_text.get_or_insert_with(|| value.clone());
+                        text_fallback.push((representation.format.clone(), value.clone()));
+                    }
+                }
+            }
+            "text/html" | "text/rtf" => {
+                if let Some(value) = &representation.text_value {
+                    if !value.trim().is_empty() {
+                        text_fallback.push((representation.format.clone(), value.clone()));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // 优先级：真实文件 > 图片快照 > 纯文本（txt 文件 + 文本内容）
+    if !file_paths.is_empty() {
+        return Ok((file_paths, None));
+    }
+    if let Some(path) = image_path {
+        return Ok((vec![path], None));
+    }
+
+    let dir = std::env::temp_dir().join("ClipRaft");
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let mut paths: Vec<PathBuf> = Vec::new();
+    for (format, value) in &text_fallback {
+        let name = sanitize_clip_filename(format, value);
+        let target = dir.join(name);
+        fs::write(&target, value).map_err(|error| error.to_string())?;
+        paths.push(target);
+    }
+    if paths.is_empty() {
+        return Err("没有可拖出的文件".to_string());
+    }
+    Ok((paths, plain_text))
+}
+
+/// 拖出粘贴监视：记录卡片内容后，后台轮询全局光标与左键状态——
+/// 不依赖 WebView2 的指针事件（跨窗口拖出时网页事件流会断流）。
+/// 左键释放即：内容写入剪贴板 → 聚焦落点窗口 → 落点点击 → Ctrl+V。
+#[tauri::command]
+async fn start_clip_drag_monitor(id: String, app: AppHandle) -> Result<(), String> {
+    let state: State<AppState> = app.state();
+    let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
+    let (hash, contents) = contents_from_payload(payload)?;
+
+    {
+        let mut ignored = state
+            .ignored_hashes
+            .lock()
+            .map_err(|_| "ignore lock poisoned".to_string())?;
+        ignored.insert(hash.clone(), Instant::now());
+    }
+
+    std::thread::spawn(move || {
+        let debug_log = |message: &str| {
+            let _ = std::fs::write(
+                "D:\\zcode\\projects\\copy-plate\\.scratch\\drag-debug.log",
+                format!("{}\n", message),
+            );
+        };
+        // 等待左键释放（上限 15 秒防挂死），期间持续跟踪全局光标
+        let mut last = POINT { x: 0, y: 0 };
+        let start = Instant::now();
+        loop {
+            thread::sleep(Duration::from_millis(16));
+            let (cursor, held) = unsafe {
+                let mut pt = POINT { x: 0, y: 0 };
+                GetCursorPos(&mut pt);
+                let held = (GetAsyncKeyState(VK_LBUTTON.into()) as u32 & 0x8000) != 0;
+                (pt, held)
+            };
+            last = cursor;
+            if !held || start.elapsed() > Duration::from_secs(15) {
+                break;
+            }
+        }
+        debug_log(&format!("released at {},{}", last.x, last.y));
+
+        let point = POINT { x: last.x, y: last.y };
+        let target = unsafe { WindowFromPoint(point) };
+        let target_root = unsafe { GetAncestor(target, GA_ROOT) };
+        unsafe { SetForegroundWindow(target_root) };
+        thread::sleep(Duration::from_millis(140));
+        // 落点补一次左键点击：让目标可编辑区拿到焦点与光标
+        unsafe {
+            SetCursorPos(point.x, point.y);
+            mouse_event(0x0002, 0, 0, 0, usize::default());
+        }
+        thread::sleep(Duration::from_millis(50));
+        unsafe {
+            mouse_event(0x0004, 0, 0, 0, usize::default());
+        }
+        thread::sleep(Duration::from_millis(160));
+
+        let context = match ClipboardContext::new() {
+            Ok(context) => context,
+            Err(error) => {
+                debug_log(&format!("clipboard open failed: {error}"));
+                return;
+            }
+        };
+        if let Err(error) = context.set(contents) {
+            debug_log(&format!("clipboard set failed: {error}"));
+            return;
+        }
+        thread::sleep(Duration::from_millis(120));
+        debug_log("paste input sent");
+        send_paste_input();
+    });
+    Ok(())
+}
+
+/// 把卡片内容写入剪贴板，聚焦松手位置下的目标窗口并发送 Ctrl+V，
+/// 实现「拖到哪个窗口就粘贴到哪个窗口」。
+#[tauri::command]
+async fn paste_clip_at_cursor(id: String, app: AppHandle) -> Result<(), String> {
+    let debug_log = |message: &str| {
+        let _ = std::fs::write(
+            "D:\\zcode\\projects\\copy-plate\\.scratch\\drag-debug.log",
+            format!("{}\n", message),
+        );
+    };
+    debug_log("paste_clip_at_cursor entered");
+    let state: State<AppState> = app.state();
+    let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
+    let (hash, contents) = contents_from_payload(payload)?;
+    debug_log("payload loaded");
+
+    {
+        let mut ignored = state
+            .ignored_hashes
+            .lock()
+            .map_err(|_| "ignore lock poisoned".to_string())?;
+        ignored.insert(hash.clone(), Instant::now());
+    }
+    let context = ClipboardContext::new().map_err(|error| error.to_string())?;
+    if let Err(error) = context.set(contents) {
+        if let Ok(mut ignored) = state.ignored_hashes.lock() {
+            ignored.remove(&hash);
+        }
+        return Err(error.to_string());
+    }
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
+    let cursor = window
+        .cursor_position()
+        .map_err(|error| error.to_string())?;
+    let point = POINT {
+        x: cursor.x as i32,
+        y: cursor.y as i32,
+    };
+    let target = unsafe { WindowFromPoint(point) };
+    let target_root = unsafe { GetAncestor(target, GA_ROOT) };
+    let our_hwnd = window
+        .hwnd()
+        .map(|handle| handle.0)
+        .unwrap_or(std::ptr::null_mut());
+    debug_log(&format!(
+        "cursor=({},{}) target={:?} root={:?} our={:?}",
+        point.x, point.y, target, target_root, our_hwnd
+    ));
+    if target_root == our_hwnd || target as isize == our_hwnd as isize {
+        let message = "落点在 ClipRaft 自己的水面上，没有可粘贴的目标";
+        debug_log(message);
+        return Err(message.to_string());
+    }
+    if unsafe { SetForegroundWindow(target_root) } == 0 {
+        let message = "目标窗口拒绝了焦点";
+        debug_log(message);
+        return Err(message.to_string());
+    }
+    thread::sleep(Duration::from_millis(140));
+    // 在落点补一次左键点击：让目标可编辑区拿到焦点与光标，Ctrl+V 才有落点
+    unsafe {
+        SetCursorPos(point.x, point.y);
+    }
+    thread::sleep(Duration::from_millis(80));
+    const LEFTDOWN: u32 = 0x0002;
+    const LEFTUP: u32 = 0x0004;
+    unsafe {
+        mouse_event(LEFTDOWN, 0, 0, 0, usize::default());
+    }
+    thread::sleep(Duration::from_millis(50));
+    unsafe {
+        mouse_event(LEFTUP, 0, 0, 0, usize::default());
+    }
+    thread::sleep(Duration::from_millis(160));
+    debug_log("sending paste input");
+    send_paste_input()
+}
+
+/// 把剪贴卡片导出为可拖出的真实文件列表（浏览器预览/调试用）。
+#[tauri::command]
+fn export_clip_paths(id: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let (files, _) = clip_drag_targets(&state, &id)?;
+    Ok(files
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect())
+}
+
+/// 从剪贴文本派生一个可读且合法的临时文件名
+fn sanitize_clip_filename(format: &str, value: &str) -> String {
+    let extension = match format {
+        "text/html" => "html",
+        "text/rtf" => "rtf",
+        _ => "txt",
+    };
+    let head: String = value
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                ' '
+            }
+        })
+        .skip_while(|c| c.is_whitespace())
+        .take(16)
+        .collect();
+    let trimmed = head.trim();
+    if trimmed.is_empty() {
+        format!("clip.{extension}")
+    } else {
+        format!("{trimmed}.{extension}")
+    }
 }
 
 fn contents_from_payload(
@@ -1156,7 +1428,7 @@ pub fn run() {
                 .map_err(|error| format!("ClipRaft data directory failed: {error}"))?;
             app.manage(AppState::open(&data_dir)?);
             if let Some(window) = app.get_webview_window("main") {
-                set_panel_width(&window, 9.0)?;
+                set_panel_width(&window, 216.0)?;
                 dock_window(&window)?;
                 let close_target = window.clone();
                 window.on_window_event(move |event| {
@@ -1177,6 +1449,9 @@ pub fn run() {
             ingest_paths,
             set_clip_pinned,
             image_preview_data_url,
+            export_clip_paths,
+            paste_clip_at_cursor,
+
             restore_clip,
             clear_history,
             get_history_persistence,

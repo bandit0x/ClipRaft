@@ -14,118 +14,168 @@ button, input { font: inherit; }
 button { border: 0; cursor: pointer; }
 
 .app-shell { position: relative; width: 100%; min-width: 0; height: 100%; pointer-events: none; }
-.creek-world { position: relative; width: 100%; height: 100%; overflow: hidden; isolation: isolate; background: linear-gradient(180deg, #0c6970, #16949a 48%, #0b6d74); }
+/* 浏览器预览：按真实面板宽度（216 逻辑 px + 余量）居中呈现 */
+.app-shell.browser-preview { max-width: 224px; margin: 0 auto; }
+.creek-world { position: relative; width: 100%; height: 100%; overflow: hidden; isolation: isolate; background: linear-gradient(180deg, #0d7a80, #17969a 48%, #0b6d72); }
 .creek-world.is-collapsed > :not(.edge-handle) { visibility: hidden; }
 .creek-world.is-collapsed::before, .creek-world.is-collapsed::after { opacity: 0; }
+
 .edge-handle { position: absolute; z-index: 9; top: 50%; right: 0; display: grid; place-items: center; width: 9px; height: 72px; padding: 0; background: linear-gradient(180deg, rgba(222, 183, 119, .96), rgba(108, 69, 39, .96)); border: 1px solid rgba(255, 226, 171, .64); border-right: 0; border-radius: 12px 0 0 12px; box-shadow: -3px 5px 12px rgba(3, 44, 48, .38), inset 1px 0 0 rgba(255,255,255,.34); transform: translateY(-50%); pointer-events: auto; }
 .edge-handle span { width: 3px; height: 30px; border-radius: 3px; background: rgba(255, 239, 195, .78); box-shadow: 0 0 6px rgba(255, 247, 215, .48); }
-.creek-world::before { position: absolute; z-index: 1; content: ""; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(4, 30, 38, .28), transparent 21%, transparent 78%, rgba(2, 30, 34, .34)); mix-blend-mode: multiply; opacity: .72; }
-.creek-world::after { position: absolute; z-index: 1; content: ""; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(255,255,255,.08), transparent 12%, transparent 84%, rgba(255,255,255,.06)); mix-blend-mode: screen; }
-.flow-backdrop { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; display: block; background: transparent; pointer-events: none; }
-.water-photo-material { position: absolute; z-index: 1; inset: -20px; overflow: hidden; background: #128890; opacity: .38; filter: blur(.2px) saturate(1.18) brightness(.95) contrast(1.06); mix-blend-mode: normal; pointer-events: none; }
-.water-photo-material::before, .water-photo-material::after { position: absolute; content: ""; right: -10%; left: -10%; height: 62%; background: url("/assets/plates/creek-water-v2.png") center / cover no-repeat; }
-.water-photo-material::before { top: -4%; background-position: 42% 14%; mask-image: linear-gradient(to bottom, #000 0 78%, transparent 100%); }
-.water-photo-material::after { bottom: -4%; background-position: 61% 82%; mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 100%); }
-.water-caustic-layer { position: absolute; z-index: 2; inset: 0; background: url("/assets/stream-water.png") 0 0 / 92px 78px repeat; filter: saturate(1.05) contrast(1.08); opacity: .28; mix-blend-mode: screen; pointer-events: none; }
-.water-highlight { position: absolute; z-index: 2; width: 42px; height: 10px; border-radius: 50%; background: radial-gradient(ellipse, rgba(231, 255, 245, .58), rgba(154, 238, 215, .17) 42%, transparent 72%); filter: blur(2.5px); opacity: .34; transform: rotate(-18deg); pointer-events: none; }
-.highlight-one { top: 23%; left: 44%; }
-.highlight-two { top: 67%; left: 7%; width: 42px; animation-delay: -3s; }
-.bank-stone { position: absolute; z-index: 2; border-radius: 56% 44% 49% 51%; background: radial-gradient(circle at 35% 28%, #e9e2c5, #a59d84 63%, #6c7469); box-shadow: inset -3px -3px 6px rgba(12, 47, 50, .26), 0 5px 10px rgba(3, 39, 46, .22); opacity: .54; pointer-events: none; }
-.stone-one { top: 7%; right: 7px; width: 23px; height: 15px; transform: rotate(9deg); }
-.stone-two { bottom: 20%; left: 5px; width: 18px; height: 12px; transform: rotate(-18deg); opacity: .38; }
 
-.upstream-header { position: relative; z-index: 4; display: grid; justify-items: center; gap: 18px; padding: 23px 6px 9px; pointer-events: auto; }
-.title-stone, .search-stone { position: relative; isolation: isolate; color: #382215; background: conic-gradient(from 45deg at 50% 50%, #7c4828 0 24%, #b87940 25% 49%, #8b502d 50% 74%, #c48649 75% 100%); clip-path: polygon(5% 12%, 46% 2%, 94% 9%, 99% 47%, 92% 92%, 52% 98%, 7% 89%, 1% 48%); filter: drop-shadow(0 9px 8px rgba(3, 42, 45, .38)); }
-.title-stone::before, .search-stone::before { position: absolute; z-index: 0; content: ""; inset: 5px 7px; background: linear-gradient(180deg, transparent 0 45%, rgba(239,173,98,.46) 46% 48%, rgba(62,31,17,.62) 49% 53%, transparent 54%), repeating-linear-gradient(91deg, transparent 0 12px, rgba(56,28,15,.18) 13px 14px); clip-path: polygon(2% 8%, 96% 2%, 100% 88%, 5% 98%); opacity: .9; }
-.title-stone::after, .search-stone::after { position: absolute; z-index: 3; content: ""; top: 8px; right: 12px; width: 12px; height: 10px; background: linear-gradient(145deg, #60402d, #2f211a); border: 2px solid #a9784c; border-radius: 2px 3px 2px 1px; box-shadow: 2px 3px 4px rgba(39,21,12,.35), inset 1px 1px rgba(255,226,180,.22); transform: rotate(5deg); }
+/* 静态兜底水材质：仅在 WebGL 不可用时可见，正常情况下被流体画布覆盖 */
+.water-photo-material { position: absolute; z-index: 1; inset: -20px; overflow: hidden; background: linear-gradient(180deg, #0d7a80, #17969a 48%, #0b6d72); opacity: .9; pointer-events: none; }
+.water-photo-material::before, .water-photo-material::after { position: absolute; content: ""; right: -10%; left: -10%; height: 58%; background: url("/assets/plates/creek-water-v2.png") center / cover no-repeat; filter: saturate(1.1) brightness(1.02); }
+.water-photo-material::before { top: -3%; background-position: 42% 12%; mask-image: linear-gradient(to bottom, #000 0 62%, transparent 98%); }
+.water-photo-material::after { bottom: -3%; background-position: 61% 86%; mask-image: linear-gradient(to bottom, transparent 2%, #000 38%); }
+
+.flow-backdrop { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; display: block; background: transparent; pointer-events: none; animation: backdrop-fade .8s ease both; }
+@keyframes backdrop-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.bank-stone { position: absolute; z-index: 2; border-radius: 52% 48% 45% 55% / 58% 52% 48% 42%; background:
+  radial-gradient(circle at 32% 24%, rgba(255,255,255,.38), transparent 46%),
+  radial-gradient(circle at 70% 86%, rgba(40,46,42,.42), transparent 60%),
+  linear-gradient(168deg, #d5d1c1 0%, #b3af9c 46%, #8d8976 80%, #726e5d 100%);
+  box-shadow: inset 0 2px 3px rgba(255,255,255,.4), inset 0 -5px 8px rgba(42,48,42,.36), 0 6px 10px rgba(2,42,46,.32); opacity: .92; pointer-events: none; }
+.bank-stone::after { position: absolute; content: ""; inset: 0; border-radius: inherit; background:
+  radial-gradient(circle, rgba(96,92,78,.2) 0 1px, transparent 1.7px) 0 0 / 12px 10px,
+  radial-gradient(circle, rgba(255,255,255,.4) 0 1px, transparent 1.5px) 4px 6px / 19px 16px;
+  opacity: .55; }
+.stone-one { top: 7%; right: 5px; width: 26px; height: 17px; transform: rotate(9deg); }
+.stone-two { bottom: 20%; left: 4px; width: 20px; height: 13px; transform: rotate(-18deg); opacity: .8; }
+
+/* 上游：刻字河石（标题）与圆石搜索框 */
+.upstream-header { position: relative; z-index: 4; display: grid; justify-items: center; gap: 16px; padding: 21px 6px 9px; pointer-events: auto; }
+.title-stone, .search-stone { position: relative; isolation: isolate; color: #43403a; background:
+  radial-gradient(circle at 30% 22%, rgba(255,255,255,.42), transparent 44%),
+  radial-gradient(ellipse at 66% 90%, rgba(44,50,46,.4), transparent 62%),
+  radial-gradient(circle at 20% 74%, rgba(116,120,108,.36), transparent 48%),
+  linear-gradient(168deg, #d9d6c7 0%, #bcb8a6 40%, #999583 78%, #7f7b6a 100%);
+  border-radius: 46% 54% 48% 52% / 58% 52% 48% 42%;
+  box-shadow: inset 0 2px 3px rgba(255,255,255,.45), inset 0 -7px 11px rgba(44,50,44,.36), 0 10px 16px rgba(2,44,48,.34), 0 3px 6px rgba(2,44,48,.2); }
+.title-stone::before, .search-stone::before { position: absolute; z-index: 0; content: ""; inset: 0; border-radius: inherit; background:
+  radial-gradient(circle, rgba(96,92,78,.22) 0 1px, transparent 1.7px) 0 0 / 13px 11px,
+  radial-gradient(circle, rgba(74,78,66,.16) 0 1px, transparent 1.6px) 6px 8px / 18px 15px,
+  radial-gradient(circle, rgba(255,255,255,.4) 0 1px, transparent 1.4px) 3px 2px / 24px 20px;
+  opacity: .5; }
+.title-stone::after, .search-stone::after { display: none; }
 .title-stone > *, .search-stone > * { position: relative; z-index: 2; }
-.title-stone { display: grid; place-items: center; width: 148px; min-height: 57px; padding: 11px 17px 9px; transform: rotate(-1.8deg); }
-.title-stone span { font-family: Georgia, serif; font-size: 18px; font-weight: 800; letter-spacing: .02em; text-shadow: 0 1px rgba(255, 218, 159, .42); }
-.title-stone small { margin-top: -3px; font-size: 9px; opacity: .76; }
-.search-stone { display: flex; align-items: center; gap: 6px; width: 142px; min-height: 48px; padding: 9px 16px; transform: rotate(1.4deg); }
-.search-stone::after { top: 6px; right: auto; left: 13px; width: 10px; height: 9px; transform: rotate(-6deg); }
-.search-stone input { width: 100%; min-width: 0; color: #322116; background: rgba(239, 194, 127, .58); border: 0; border-radius: 3px 5px 3px 4px; outline: 0; padding: 4px 6px; font-size: 11px; box-shadow: inset 0 2px 5px rgba(58, 29, 16, .32), 0 1px rgba(255,225,176,.25); }
-.search-stone input::placeholder { color: #60442f; }
+.title-stone { display: grid; place-items: center; width: 148px; min-height: 56px; padding: 11px 17px 9px; transform: rotate(-1.6deg); }
+.title-stone span { font-family: Georgia, serif; font-size: 18px; font-weight: 800; letter-spacing: .02em; color: #45423a; text-shadow: 0 1px 0 rgba(255,255,255,.55), 0 -1px 1px rgba(40,38,30,.3); }
+.title-stone small { margin-top: -3px; font-size: 9px; color: #5b574c; opacity: .85; }
+.search-stone { display: flex; align-items: center; gap: 6px; width: 142px; min-height: 46px; padding: 9px 15px; transform: rotate(1.2deg); color: #55524a; }
+.search-stone input { width: 100%; min-width: 0; color: #3c3a32; background: rgba(58,62,52,.12); border: 0; border-radius: 9px; outline: 0; padding: 4px 8px; font-size: 11px; box-shadow: inset 0 2px 4px rgba(48,52,42,.32), 0 1px 0 rgba(255,255,255,.5); }
+.search-stone input::placeholder { color: #5f5c52; }
 
 .history-stream { position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 22px; max-height: calc(100% - 219px); overflow-y: auto; scrollbar-width: none; padding: 13px 0 160px; pointer-events: auto; }
 .history-stream::-webkit-scrollbar { display: none; }
 .raft-motion { position: relative; width: 124px; min-height: 142px; will-change: transform; }
-.raft-motion::before { position: absolute; z-index: 2; content: ""; top: 48px; left: 50%; width: 142px; height: 86px; background: radial-gradient(ellipse 8px 3px at 7% 48%, rgba(244,255,249,.9) 0 38%, transparent 52%), radial-gradient(circle 3px at 3% 42%, rgba(239,255,247,.86) 0 45%, transparent 62%), radial-gradient(circle 2px at 12% 37%, rgba(228,255,242,.72) 0 45%, transparent 64%), radial-gradient(ellipse 9px 3px at 93% 54%, rgba(244,255,249,.88) 0 38%, transparent 52%), radial-gradient(circle 3px at 97% 47%, rgba(239,255,247,.82) 0 45%, transparent 62%), radial-gradient(circle 2px at 88% 43%, rgba(228,255,242,.7) 0 45%, transparent 64%); opacity: .74; filter: blur(.35px); mix-blend-mode: screen; transform: translateX(-50%); animation: side-splash 3.2s ease-in-out infinite; pointer-events: none; }
-.raft-motion::after { position: absolute; z-index: 0; content: ""; top: 45px; left: 50%; width: 124px; height: 92px; background: radial-gradient(ellipse at 50% 50%, transparent 0 52%, rgba(226,255,241,.64) 56% 59%, transparent 64%), radial-gradient(circle at 15% 55%, rgba(235,255,246,.7) 0 2px, transparent 3px), radial-gradient(circle at 85% 43%, rgba(235,255,246,.65) 0 2px, transparent 3px), radial-gradient(circle at 25% 72%, rgba(224,255,240,.52) 0 1px, transparent 3px), radial-gradient(circle at 76% 69%, rgba(224,255,240,.58) 0 1px, transparent 3px); opacity: .76; filter: blur(.7px); mix-blend-mode: screen; transform: translateX(-50%) rotate(-3deg); animation: hull-swash 3.9s ease-in-out infinite; pointer-events: none; }
-.raft-wake { position: absolute; z-index: 0; inset: 7px -22px -35px; pointer-events: none; }
-.raft-wake::before { position: absolute; content: ""; top: 82px; left: 50%; width: 144px; height: 170px; background: radial-gradient(ellipse at 50% 0, rgba(238, 255, 244, .7), transparent 22%), linear-gradient(66deg, transparent 46%, rgba(226, 255, 237, .58) 49% 53%, transparent 56%) 0 0 / 50% 100% no-repeat, linear-gradient(-66deg, transparent 46%, rgba(226, 255, 237, .58) 49% 53%, transparent 56%) 100% 0 / 50% 100% no-repeat; clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%); filter: blur(3px); opacity: .9; transform: translateX(-50%); mix-blend-mode: screen; animation: wake-drift 4.8s ease-in-out infinite; }
-.raft-wake::after { position: absolute; content: ""; top: 25px; left: 50%; width: 182px; height: 132px; background: radial-gradient(ellipse at 50% 23%, transparent 0 20%, rgba(235, 255, 244, .58) 23% 26%, transparent 31%), radial-gradient(ellipse at 50% 23%, transparent 0 38%, rgba(166, 244, 220, .34) 41% 44%, transparent 50%); filter: blur(1.6px); opacity: .9; transform: translateX(-50%) rotate(-4deg); mix-blend-mode: screen; animation: bow-ring 3.8s ease-in-out infinite; }
-.raft-wake span { position: absolute; top: 75%; left: 50%; width: 102px; height: 26px; border: 1px solid rgba(225, 255, 238, .6); border-radius: 50%; opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); filter: blur(.4px); mix-blend-mode: screen; animation: raft-ripple 4.2s cubic-bezier(.2, .8, .25, 1) infinite; }
-.raft-wake span:nth-child(2) { animation-delay: -1.6s; }
-.raft-wake span:nth-child(3) { animation-delay: -3.2s; }
-.raft-card { position: relative; z-index: 1; isolation: isolate; width: 106px; min-height: 130px; margin: 0 auto; padding: 17px 8px 9px; color: #493326; background: radial-gradient(ellipse at 22% 17%, rgba(247, 185, 104, .42) 0 2px, transparent 3px), radial-gradient(ellipse at 75% 74%, rgba(57, 29, 17, .3) 0 2px, transparent 3px), linear-gradient(103deg, #60402a 0 10%, #aa713f 10% 22%, #7d4c2d 22% 31%, #c28a4e 31% 49%, #80502d 49% 60%, #bc7f44 60% 79%, #70432a 79% 90%, #b77a40 90%); clip-path: polygon(8% 2%, 26% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); filter: drop-shadow(0 14px 10px rgba(2, 45, 50, .36)); cursor: grab; transition: filter .35s ease; }
+
+/* 木筏：圆角厚木 + 绳框，浮在由 shader 绘制的涟漪与尾流上 */
+.raft-card { position: relative; z-index: 1; isolation: isolate; width: 106px; min-height: 130px; margin: 0 auto; padding: 17px 8px 9px; color: #4d382b; background:
+  radial-gradient(circle at 24% 12%, rgba(255,226,168,.24), transparent 42%),
+  repeating-linear-gradient(97deg, rgba(48,26,14,.18) 0 1px, transparent 1px 15px),
+  linear-gradient(115deg, #93613a 0%, #7a4c2c 36%, #93613a 60%, #673f22 100%);
+  border-radius: 16px 19px 15px 18px / 18px 15px 19px 16px;
+  box-shadow: inset 0 2px 2px rgba(255,226,170,.34), inset 0 -6px 10px rgba(32,16,8,.42), 0 13px 14px rgba(2,45,50,.34); cursor: grab; transition: filter .35s ease;
+  /* 拖出粘贴依赖干净的指针事件流：禁文字选择，防止按下拖动变成文字选取 */
+  user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
 .raft-card:active { cursor: grabbing; }
-.raft-card::before { position: absolute; z-index: -2; content: ""; inset: 8px -3px -7px 4px; background: linear-gradient(100deg, #493020, #86512d 29%, #5d3825 55%, #9b6337 74%, #4a2c20); clip-path: polygon(8% 2%, 27% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); opacity: .8; }
-.raft-card::after { position: absolute; z-index: -1; content: ""; inset: 5px; background: repeating-linear-gradient(92deg, transparent 0 13px, rgba(57, 29, 16, .16) 13px 14px, transparent 14px 28px); border: 1px solid rgba(255, 211, 139, .3); clip-path: polygon(8% 2%, 27% 5%, 45% 1%, 72% 4%, 94% 1%, 98% 22%, 95% 48%, 99% 78%, 91% 98%, 65% 95%, 43% 100%, 19% 96%, 4% 100%, 6% 74%, 1% 49%, 5% 24%); box-shadow: inset 0 0 12px rgba(255, 190, 104, .15), inset 0 -13px 0 rgba(45, 24, 16, .2); opacity: .9; }
-.raft-card:hover { filter: brightness(1.09) drop-shadow(0 18px 11px rgba(2, 45, 50, .32)); }
-.raft-card.is-selected { filter: brightness(1.08) drop-shadow(0 0 7px rgba(203, 255, 221, .58)) drop-shadow(0 17px 11px rgba(2, 45, 50, .34)); }
+.raft-card::before { position: absolute; z-index: -1; content: ""; left: 4px; right: 4px; bottom: -6px; height: 18px; background: linear-gradient(180deg, #5b3820, #3c2412); border-radius: 9px 11px 10px 11px; box-shadow: 0 6px 9px rgba(2,45,50,.3); }
+.raft-card:hover { filter: brightness(1.08); }
+.raft-card.is-selected { filter: brightness(1.07) drop-shadow(0 0 7px rgba(203, 255, 221, .55)); }
 .raft-card:focus-visible { outline: 2px solid rgba(226, 255, 226, .92); outline-offset: 4px; }
-.raft-tilt-0 { animation: raft-bob-0 5.2s ease-in-out infinite; }
-.raft-tilt-1 { animation: raft-bob-1 5.8s ease-in-out -1.8s infinite; }
-.raft-tilt-2 { animation: raft-bob-2 5.5s ease-in-out -3.1s infinite; }
-.raft-rope { position: absolute; left: -4px; right: -4px; height: 6px; border: 2px solid #4b2d21; border-radius: 50%; background: repeating-linear-gradient(100deg, #d9aa70 0 4px, #a76e3c 4px 7px); box-shadow: 0 1px 0 rgba(255,255,255,.24), 0 2px 2px rgba(32, 18, 11, .32); }
-.rope-top { top: 9px; transform: rotate(-1deg); }
-.rope-bottom { bottom: 9px; transform: rotate(2deg); }
-.raft-rails { position: absolute; z-index: 1; inset: 14px 2px 13px; background: linear-gradient(90deg, rgba(68, 35, 21, .72) 0 4px, rgba(218, 154, 83, .32) 4px 6px, transparent 6px calc(100% - 6px), rgba(218, 154, 83, .32) calc(100% - 6px) calc(100% - 4px), rgba(68, 35, 21, .72) calc(100% - 4px)); opacity: .78; pointer-events: none; transform: rotate(-1deg); }
-.modality-badge { position: absolute; z-index: 4; top: 3px; left: 10px; display: grid; place-items: center; width: 21px; height: 20px; color: #fff7dd; border: 2px solid #4d3023; border-radius: 6px 5px 7px 4px; box-shadow: 2px 3px 0 rgba(42, 23, 14, .35), inset 1px 1px 2px rgba(255,255,255,.32); transform: rotate(-7deg); }
-.badge-text { background: linear-gradient(145deg, #66b39a, #2a776b); }
-.badge-image { background: linear-gradient(145deg, #9d78db, #4e348b); }
-.badge-file { background: linear-gradient(145deg, #ffc15b, #d77516); }
+.raft-tilt-0 { animation: raft-bob-0 3.8s ease-in-out infinite; }
+.raft-tilt-1 { animation: raft-bob-1 4.6s ease-in-out -1.4s infinite; }
+.raft-tilt-2 { animation: raft-bob-2 4.2s ease-in-out -2.6s infinite; }
+.raft-rope { position: absolute; left: -4px; right: -4px; height: 6px; border: 2px solid #6a452a; border-radius: 50%; background: repeating-linear-gradient(100deg, #d9aa70 0 4px, #b0793f 4px 7px); box-shadow: 0 1px 0 rgba(255,255,255,.2), 0 2px 2px rgba(32, 18, 11, .28); opacity: .92; }
+.rope-top { top: 8px; transform: rotate(-1deg); }
+.rope-bottom { bottom: 8px; transform: rotate(2deg); }
+.raft-rails { position: absolute; z-index: 1; inset: 14px 2px 13px; background: linear-gradient(90deg, rgba(74, 42, 24, .5) 0 3px, transparent 3px calc(100% - 3px), rgba(74, 42, 24, .5) calc(100% - 3px)); opacity: .6; pointer-events: none; }
+.modality-badge { position: absolute; z-index: 4; top: 4px; left: 10px; display: grid; place-items: center; width: 25px; height: 23px; color: #fff7dd; border: 1px solid rgba(64, 40, 26, .55); box-shadow: 1px 2px 3px rgba(42, 23, 14, .3), inset 0 1px 1px rgba(255,255,255,.4); transform: rotate(-6deg); }
+.badge-text { background: linear-gradient(145deg, #66b39a, #2a776b); border-radius: 5px; }
+.badge-image { background: linear-gradient(145deg, #9d78db, #4e348b); border-radius: 50%; }
+.badge-file { background: linear-gradient(145deg, #ffc15b, #d77516); border-radius: 5px 12px 5px 12px; }
+
+/* 模态差异化：青竹简（文本）/ 紫画框（图片）/ 橙货舱（文件）——
+   色带 + 轮廓 + 纸面三重区分，不再只依赖小图标 */
+.raft-card.raft-text { border-radius: 20px 24px 16px 22px / 26px 22px 18px 20px; background:
+  radial-gradient(circle at 24% 12%, rgba(255,226,168,.24), transparent 42%),
+  repeating-linear-gradient(97deg, rgba(16,50,40,.16) 0 1px, transparent 1px 15px),
+  linear-gradient(115deg, #6f9684 0%, #55796a 36%, #6f9684 60%, #466152 100%);
+  box-shadow: inset 0 3px 0 rgba(102,179,154,.95), inset 0 -6px 10px rgba(24,40,32,.42), 0 13px 14px rgba(2,45,50,.34); }
+.raft-card.raft-text::before { background: linear-gradient(180deg, #4d7263, #31493d); }
+.raft-card.raft-text .raft-rope { border-color: #1d6e5f; background: repeating-linear-gradient(100deg, #8fd0bc 0 4px, #4da892 4px 7px); }
+.raft-card.raft-text .paper { background: linear-gradient(115deg, #f2fbf3, #dcf0e4); }
+
+.raft-card.raft-image { border-radius: 9px 7px 11px 7px; background:
+  radial-gradient(circle at 24% 12%, rgba(255,226,168,.2), transparent 42%),
+  repeating-linear-gradient(97deg, rgba(28,16,48,.18) 0 1px, transparent 1px 15px),
+  linear-gradient(115deg, #7760b2 0%, #584290 36%, #7760b2 60%, #433070 100%);
+  box-shadow: inset 0 3px 0 rgba(157,120,219,.95), inset 0 -6px 10px rgba(28,18,48,.44), 0 13px 14px rgba(2,45,50,.34); }
+.raft-card.raft-image::before { background: linear-gradient(180deg, #5c4494, #3a2a63); }
+.raft-card.raft-image .raft-rope { border-color: #4e348b; background: repeating-linear-gradient(100deg, #c3a8ef 0 4px, #8a66d0 4px 7px); }
+.raft-card.raft-image .paper { background: linear-gradient(115deg, #f4eeff, #e0d4f6); }
+
+.raft-card.raft-file { border-radius: 6px 16px 6px 16px / 8px 18px 8px 18px; background:
+  radial-gradient(circle at 24% 12%, rgba(255,226,168,.26), transparent 42%),
+  repeating-linear-gradient(97deg, rgba(74,38,10,.18) 0 1px, transparent 1px 15px),
+  linear-gradient(115deg, #bd8a3c 0%, #9c6a24 36%, #bd8a3c 60%, #7c4e16 100%);
+  box-shadow: inset 0 3px 0 rgba(255,193,91,.95), inset 0 -6px 10px rgba(52,30,8,.44), 0 13px 14px rgba(2,45,50,.34); }
+.raft-card.raft-file::before { background: linear-gradient(180deg, #8a5c1c, #5c3a10); }
+.raft-card.raft-file .raft-rope { border-color: #a06a26; background: repeating-linear-gradient(100deg, #ffd98f 0 4px, #e0a44c 4px 7px); }
+.raft-card.raft-file .paper { background: linear-gradient(115deg, #fff8e6, #ffe9bd); border: 2px solid #f5c563; }
 .raft-content { position: relative; z-index: 2; display: block; width: 100%; padding: 0; color: #4d382b; background: transparent; text-align: left; }
-.paper { display: grid; gap: 3px; min-height: 86px; padding: 10px 8px 8px; background: radial-gradient(circle at 14% 17%, rgba(111, 75, 39, .08) 0 1px, transparent 2px) 0 0 / 13px 11px, linear-gradient(115deg, #f6e7c2, #d6c18e); clip-path: polygon(3% 2%, 96% 0, 100% 92%, 82% 100%, 48% 96%, 13% 100%, 0 93%); box-shadow: inset 0 0 10px rgba(93,63,33,.18), 0 2px 3px rgba(55, 36, 23, .14); }
+.paper { display: grid; gap: 3px; min-height: 86px; padding: 10px 9px 8px; background: linear-gradient(115deg, #f7ecd0, #e2d1a4); border-radius: 6px 9px 6px 10px / 9px 6px 10px 6px; box-shadow: 0 2px 4px rgba(55, 36, 23, .28), inset 0 0 9px rgba(120, 90, 50, .14); transform: rotate(-.6deg); }
 .paper strong { font-family: Georgia, "Microsoft YaHei", serif; font-size: 12px; line-height: 1.24; overflow-wrap: anywhere; }
 .paper span { font-size: 8px; opacity: .73; }
 .paper small { justify-self: end; font-size: 8px; opacity: .6; }
-.image-preview { position: relative; height: 46px; margin: 0 2px 5px; overflow: hidden; border: 2px solid #f1e2c1; background: linear-gradient(#8bd4e5 0 54%, #5caeaa 55%); box-shadow: inset 0 0 5px rgba(30, 56, 59, .35), 0 2px 4px rgba(51,43,33,.35); }
+.image-preview { position: relative; height: 46px; margin: 0 2px 5px; overflow: hidden; border: 2px solid rgba(248, 236, 208, .9); border-radius: 5px 7px 5px 7px; background: linear-gradient(180deg, #8fd0dd 0%, #79c2ba 58%, #5caeaa 100%); box-shadow: inset 0 0 6px rgba(30, 56, 59, .3), 0 2px 4px rgba(51,43,33,.3); }
 .image-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.sun { position: absolute; top: 6px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: #fff0ad; box-shadow: 0 0 8px rgba(255,241,170,.8); }
+.sun { position: absolute; top: 6px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: #fff0ad; box-shadow: 0 0 9px rgba(255,241,170,.85); }
 .mountain { position: absolute; bottom: 4px; width: 72px; height: 41px; clip-path: polygon(0 100%, 37% 26%, 58% 55%, 76% 14%, 100% 100%); }
-.mountain-back { left: -17px; background: #6c8ea1; }
-.mountain-front { right: -10px; background: #3e6870; }
-.lake-line { position: absolute; left: 8px; right: 8px; bottom: 7px; border-top: 1px solid rgba(241,255,237,.8); box-shadow: 0 3px 0 rgba(241,255,237,.33); }
-.file-preview { position: relative; width: 50px; height: 39px; margin: 4px auto 8px; border: 2px solid #a96117; border-radius: 4px 8px 6px 6px; background: linear-gradient(140deg, #ffda5a, #df8512); box-shadow: inset 1px 1px 3px rgba(255,255,255,.35), 0 3px 4px rgba(51,43,33,.27); }
+.mountain-back { left: -17px; background: #7ba3ae; }
+.mountain-front { right: -10px; background: #47707a; }
+.lake-line { position: absolute; left: 8px; right: 8px; bottom: 7px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, transparent, rgba(241,255,237,.75), transparent); }
+.file-preview { position: relative; width: 50px; height: 39px; margin: 4px auto 8px; border: 2px solid #a96117; border-radius: 7px 9px 7px 8px; background: linear-gradient(140deg, #ffda5a, #df8512); box-shadow: inset 1px 1px 3px rgba(255,255,255,.35), 0 3px 4px rgba(51,43,33,.27); }
 .file-tab { position: absolute; top: -7px; left: 4px; width: 19px; height: 8px; border-radius: 4px 5px 0 0; background: #ffd868; }
 .zip-mark { position: absolute; inset: 11px 0 auto; color: #79511b; text-align: center; font: 700 9px monospace; }
-.raft-actions { position: absolute; z-index: 5; top: 8px; right: 8px; display: flex; gap: 4px; opacity: .86; transition: opacity .22s ease, transform .22s ease; }
-.raft-card:hover .raft-actions, .raft-card:focus-within .raft-actions { opacity: 1; transform: translateY(-1px); }
-.raft-actions button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; color: #fff2d7; background: rgba(111, 67, 36, .64); border: 1px solid rgba(255, 215, 156, .24); border-radius: 6px 5px 7px 4px; font-size: 9px; line-height: 1.1; }
-.raft-actions button.is-active { color: #fff8bf; background: rgba(139, 91, 34, .88); box-shadow: 0 0 7px rgba(255, 214, 111, .32); }
+.raft-actions { position: absolute; z-index: 5; top: 8px; right: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity .22s ease, transform .22s ease; }
+.raft-card:hover .raft-actions, .raft-card:focus-within .raft-actions, .raft-card.is-selected .raft-actions { opacity: 1; transform: translateY(-1px); }
+.raft-actions button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; color: #fff2d7; background: rgba(104, 66, 36, .72); border: 1px solid rgba(255, 215, 156, .3); border-radius: 6px; box-shadow: inset 0 1px 1px rgba(255,224,168,.3); font-size: 9px; line-height: 1.1; }
+.raft-actions button.is-active { color: #fff8bf; background: rgba(139, 91, 34, .9); box-shadow: 0 0 7px rgba(255, 214, 111, .32); }
 .raft-card.is-removing { animation: raft-downstream .17s ease-in forwards; pointer-events: none; }
 .empty-water { padding: 42px 15px; color: rgba(240,255,246,.84); text-align: center; font-family: Georgia, serif; font-size: 15px; line-height: 1.75; }
 .empty-water span { font-family: "Segoe UI", sans-serif; font-size: 10px; opacity: .78; }
 
-.trash-bay { position: absolute; z-index: 6; right: 50%; bottom: 94px; display: grid; justify-items: center; gap: 2px; width: 102px; padding: 8px 10px 7px; color: #fff4db; background: rgba(75, 48, 31, .8); border: 1px solid rgba(251, 211, 155, .44); border-radius: 18px 13px 20px 12px; box-shadow: 0 7px 18px rgba(2, 37, 40, .32), inset 0 1px 0 rgba(255,255,255,.18); transform: translateX(50%); backdrop-filter: blur(8px); transition: background .22s ease, transform .22s ease, box-shadow .22s ease; pointer-events: auto; }
+.trash-bay { position: absolute; z-index: 6; right: 50%; bottom: 94px; display: grid; justify-items: center; gap: 2px; width: 102px; padding: 8px 10px 7px; color: #fff4db; background: rgba(58, 44, 34, .62); border: 1px solid rgba(255, 228, 180, .3); border-radius: 15px; box-shadow: 0 7px 16px rgba(2, 37, 40, .3), inset 0 1px 0 rgba(255,255,255,.16); transform: translateX(50%); backdrop-filter: blur(9px); transition: background .22s ease, transform .22s ease, box-shadow .22s ease; pointer-events: auto; }
 .trash-bay span { font-size: 9px; }
-.trash-bay.is-hovered { background: rgba(145, 66, 45, .92); box-shadow: 0 9px 20px rgba(79, 28, 24, .42), 0 0 0 4px rgba(245, 180, 115, .15); transform: translateX(50%) translateY(-3px) scale(1.04); }
+.trash-bay.is-hovered { background: rgba(128, 60, 42, .82); box-shadow: 0 9px 18px rgba(79, 28, 24, .4), 0 0 0 4px rgba(245, 180, 115, .14); transform: translateX(50%) translateY(-3px) scale(1.04); }
 
-.detached-dock { position: absolute; z-index: 4; right: 27px; bottom: 57px; isolation: isolate; display: flex; gap: 5px; padding: 13px 12px; background: conic-gradient(from 45deg at 50% 50%, #6e3e25 0 24%, #aa6938 25% 49%, #7d4729 50% 74%, #bd7a43 75% 100%); clip-path: polygon(5% 13%, 43% 2%, 96% 9%, 100% 48%, 93% 92%, 53% 98%, 8% 90%, 1% 51%); filter: drop-shadow(0 9px 8px rgba(3, 39, 42, .42)); transform: rotate(-1.3deg); pointer-events: auto; }
-.detached-dock::before { position: absolute; z-index: 0; content: ""; inset: 6px 7px; background: linear-gradient(180deg, transparent 0 44%, rgba(223,146,75,.44) 45% 48%, rgba(55,27,15,.66) 49% 53%, transparent 54%), repeating-linear-gradient(90deg, transparent 0 13px, rgba(50,24,13,.2) 14px 15px); clip-path: polygon(2% 7%, 97% 2%, 100% 89%, 5% 98%); opacity: .92; }
-.detached-dock::after { position: absolute; z-index: 3; content: ""; top: 7px; right: 10px; width: 10px; height: 9px; background: linear-gradient(145deg, #5b3b2a, #2e2019); border: 2px solid #a87449; border-radius: 2px 3px 2px 1px; box-shadow: 2px 3px 4px rgba(39,21,12,.34); transform: rotate(7deg); pointer-events: none; }
-.detached-dock button { position: relative; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; color: #ffe9be; background: linear-gradient(145deg, #81502e, #4d2b1a); border: 2px solid #d09352; border-radius: 3px 5px 2px 4px; box-shadow: inset 1px 1px 3px rgba(255,218,158,.28), 0 3px 4px rgba(46, 24, 14, .3); }
+/* 下游：木制平台 dock */
+.detached-dock { position: absolute; z-index: 4; right: 27px; bottom: 57px; isolation: isolate; display: flex; gap: 6px; padding: 11px 12px; background:
+  repeating-linear-gradient(180deg, rgba(56,32,18,.15) 0 1px, transparent 1px 10px),
+  linear-gradient(180deg, #bb8c57 0%, #a4743f 34%, #8d5f33 70%, #7a5029 100%);
+  border-radius: 13px 16px 12px 15px / 15px 12px 16px 13px;
+  box-shadow: inset 0 2px 2px rgba(255,226,170,.4), inset 0 -5px 9px rgba(46,24,12,.42), 0 10px 18px rgba(2,42,46,.4); transform: rotate(-1.2deg); pointer-events: auto; }
+.detached-dock::before, .detached-dock::after { display: none; }
+.detached-dock button { position: relative; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; color: #ffe9be; background: radial-gradient(circle at 34% 28%, #9a6a3c, #6f4523 74%); border: 1px solid rgba(255, 214, 150, .35); border-radius: 9px 11px 9px 11px; box-shadow: inset 0 1px 2px rgba(255,218,158,.35), 0 3px 4px rgba(46, 24, 14, .32); }
 .detached-dock button:disabled { cursor: not-allowed; opacity: .42; filter: saturate(.55); }
 .detached-dock button:nth-child(2) { transform: rotate(2deg); }
 .detached-dock button:nth-child(3) { transform: rotate(-3deg); }
-.status-strip { position: absolute; z-index: 4; right: 11px; bottom: 16px; left: 11px; display: flex; align-items: center; gap: 5px; color: rgba(245,255,248,.9); font-size: 8px; pointer-events: auto; }
+.status-strip { position: absolute; z-index: 4; right: 10px; bottom: 15px; left: 10px; display: flex; align-items: center; gap: 5px; padding: 5px 9px; color: rgba(245,255,248,.92); background: rgba(8, 56, 60, .34); border: 1px solid rgba(180, 240, 226, .16); border-radius: 12px; backdrop-filter: blur(7px); font-size: 9px; pointer-events: auto; }
+/* 拖影：拖出时跟随光标的小木牌 */
+.drag-ghost { position: fixed; z-index: 60; max-width: 190px; padding: 7px 12px; overflow: hidden; color: #fff3d9; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(115deg, rgba(96,60,32,.97), rgba(56,34,16,.97)); border: 1px solid rgba(255,215,156,.55); border-radius: 10px; box-shadow: 0 10px 22px rgba(2,40,44,.45); pointer-events: none; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #c5f79f; box-shadow: 0 0 8px #c5f79f; }
 .status-strip > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.undo-action { flex: 0 0 auto; padding: 3px 5px; color: #fff6df; background: rgba(129, 82, 41, .8); border-radius: 7px; font-size: 8px; }
-.auto-paste { padding: 4px 7px; color: #f7e6c5; background: linear-gradient(145deg, #8a5732, #5d351f); border: 1px solid rgba(232,177,105,.65); border-radius: 3px 5px 2px 4px; box-shadow: 0 3px 5px rgba(3,40,42,.25); font-size: 8px; transform: rotate(1deg); }
+.undo-action { flex: 0 0 auto; padding: 3px 6px; color: #fff6df; background: rgba(129, 82, 41, .8); border-radius: 7px; font-size: 9px; }
+.auto-paste { padding: 4px 7px; color: #f7e6c5; background: linear-gradient(145deg, #8a5732, #5d351f); border: 1px solid rgba(232,177,105,.5); border-radius: 8px; box-shadow: 0 2px 4px rgba(3,40,42,.25); font-size: 9px; }
 .auto-paste.is-on { color: #fff3c9; background: linear-gradient(145deg, #9d6a3a, #704326); }
 .icon { flex: 0 0 auto; }
 .raft-content:focus-visible, .raft-actions button:focus-visible, .trash-bay:focus-visible, .detached-dock button:focus-visible, .undo-action:focus-visible, .auto-paste:focus-visible { outline: 2px solid #f4ffd7; outline-offset: 3px; }
 
-@keyframes wake-drift { 0%, 100% { opacity: .28; transform: translateX(-50%) translateY(0) scaleX(.78); } 50% { opacity: .64; transform: translateX(-50%) translateY(8px) scaleX(1.04); } }
-@keyframes bow-ring { 0%, 100% { opacity: .24; transform: translateX(-50%) rotate(-4deg) scale(.86); } 50% { opacity: .62; transform: translateX(-50%) rotate(-4deg) scale(1.04); } }
-@keyframes raft-ripple { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(.42); } 14% { opacity: .44; } 74% { opacity: .13; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-5deg) scale(1.18); } }
-@keyframes hull-swash { 0%, 100% { opacity: .54; transform: translateX(-50%) translateY(1px) rotate(-3deg) scale(.92); } 50% { opacity: .88; transform: translateX(-50%) translateY(-2px) rotate(-1deg) scale(1.04); } }
-@keyframes side-splash { 0%, 100% { opacity: .46; transform: translateX(-50%) translateY(2px) scale(.94); } 46% { opacity: .9; transform: translateX(-50%) translateY(-2px) scale(1.04); } 62% { opacity: .66; transform: translateX(-50%) translateY(0) scale(1); } }
-@keyframes raft-bob-0 { 0%, 100% { transform: translate3d(-1px, 1px, 0) rotate(-2.7deg) scale(.9); } 50% { transform: translate3d(2px, -4px, 0) rotate(-1.3deg) scale(.91); } }
-@keyframes raft-bob-1 { 0%, 100% { transform: translate3d(1px, -1px, 0) rotate(2.2deg) scale(.9); } 50% { transform: translate3d(-2px, 4px, 0) rotate(.8deg) scale(.91); } }
-@keyframes raft-bob-2 { 0%, 100% { transform: translate3d(-1px, 2px, 0) rotate(-1.4deg) scale(.9); } 50% { transform: translate3d(2px, -3px, 0) rotate(-2.6deg) scale(.91); } }
+@keyframes raft-bob-0 { 0%, 100% { transform: translate3d(-2px, 3px, 0) rotate(-3.4deg) scale(.9); } 50% { transform: translate3d(2px, -6px, 0) rotate(-1.0deg) scale(.92); } }
+@keyframes raft-bob-1 { 0%, 100% { transform: translate3d(2px, -3px, 0) rotate(3.0deg) scale(.9); } 50% { transform: translate3d(-2px, 6px, 0) rotate(.5deg) scale(.92); } }
+@keyframes raft-bob-2 { 0%, 100% { transform: translate3d(-1px, 4px, 0) rotate(-2.0deg) scale(.9); } 50% { transform: translate3d(2px, -5px, 0) rotate(-3.6deg) scale(.92); } }
 @keyframes raft-downstream { to { opacity: 0; transform: translate3d(28px, 34px, 0) rotate(4deg) scale(.9); } }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } .raft-tilt-0 { transform: rotate(-2.7deg) scale(.9); } .raft-tilt-1 { transform: rotate(2.2deg) scale(.9); } .raft-tilt-2 { transform: rotate(-1.4deg) scale(.9); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } .raft-tilt-0 { transform: rotate(-3.4deg) scale(.9); } .raft-tilt-1 { transform: rotate(3.0deg) scale(.9); } .raft-tilt-2 { transform: rotate(-2.0deg) scale(.9); } }
