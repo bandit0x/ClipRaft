@@ -854,7 +854,7 @@ fn set_panel_width(window: &WebviewWindow, logical_width: f64) -> Result<u32, St
 /// Windows：保持 9pt 既有行为。
 #[cfg(target_os = "macos")]
 fn collapse_window(window: &WebviewWindow) -> Result<(), String> {
-    let width = set_panel_width(window, 26.0)?;
+    let width = set_panel_width(window, 30.0)?;
     if let Ok(Some(monitor)) = window.current_monitor() {
         let area = monitor.work_area();
         let _ = window.set_size(PhysicalSize::new(width, area.size.height));

@@ -578,7 +578,7 @@ function App() {
   };
 
   return (
-    <main className={`app-shell${isTauri ? "" : " browser-preview"}`}>
+    <main className={`app-shell${isTauri ? "" : " browser-preview"}${isMacPlatform ? " mac" : ""}`}>
       <div ref={worldRef} className={`creek-world ${expanded ? "" : "is-collapsed"}`} aria-label="ClipRaft 剪贴板面板" onMouseEnter={() => { cancelCollapse(); holdPanelOpen(); }} onMouseLeave={() => { if (expanded && !ghostActiveRef.current) scheduleCollapse(); }}>
         {!expanded && <button className="edge-handle" onClick={() => openPanel()} aria-label="打开 ClipRaft"><span /></button>}
         {expanded && <FlowBackdrop rafts={raftAnchors} />}
