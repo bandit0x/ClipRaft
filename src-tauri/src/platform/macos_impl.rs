@@ -10,6 +10,7 @@ use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::{CFString, CFStringRef};
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, CGKeyCode};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::{DragEnded, DragPayload};
@@ -77,13 +78,25 @@ pub fn send_paste() -> Result<(), String> {
 /// 原生拖出：把载荷派发到主线程启动 NSDraggingSession（无需任何系统权限）。
 /// macOS 上 `run_on_main_thread` 派发后立即返回，落点通过 `drag://ended` 事件回传。
 pub fn start_drag_out(app: AppHandle, payload: DragPayload) -> Result<(), String> {
+    // 拖拽期间悬停监视器暂停"离开即收起"
+    app.state::<AppState>()
+        .dragging
+        .store(true, Ordering::Relaxed);
     let app_for_thread = app.clone();
-    app.run_on_main_thread(move || {
+    let dispatch = app.run_on_main_thread(move || {
         let Some(window) = app_for_thread.get_webview_window("main") else {
+            app_for_thread
+                .state::<AppState>()
+                .dragging
+                .store(false, Ordering::Relaxed);
             return;
         };
         if let Err(error) = super::drag_out_macos::start_drag(&app_for_thread, &window, &payload) {
             println!("ClipRaft drag-out failed: {error}");
+            app_for_thread
+                .state::<AppState>()
+                .dragging
+                .store(false, Ordering::Relaxed);
             // 失败也要让前端结束拖拽状态
             let _ = app_for_thread.emit(
                 "drag://ended",
@@ -95,6 +108,12 @@ pub fn start_drag_out(app: AppHandle, payload: DragPayload) -> Result<(), String
                 },
             );
         }
-    })
-    .map_err(|error| error.to_string())
+    });
+    if let Err(error) = dispatch {
+        app.state::<AppState>()
+            .dragging
+            .store(false, Ordering::Relaxed);
+        return Err(error.to_string());
+    }
+    Ok(())
 }

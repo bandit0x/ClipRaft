@@ -14,7 +14,8 @@ Status: in-progress
 - **无 Dock 图标**：`set_activation_policy(Accessory)`，对齐 Windows `skipTaskbar`。
 - **透明窗口**：`app.macOSPrivateApi: true`（私有 API，WKWebView `drawsBackground=false`；本产品不上架 App Store）。
 - **焦点契约（ADR-0002）**：复制触发的展开先 `set_focusable(false)` 再 `show()`，不抢焦点；悬停/点击把手/托盘打开（`focus_panel` 命令）才恢复可聚焦。窗口配置 `acceptFirstMouse: true`。
-- **停靠**：macOS 用 `monitor.work_area()` 避开菜单栏/程序坞；Windows 保留全屏高度停靠。
+- **停靠**：macOS 用 `monitor.work_area()` 避开菜单栏/程序坞；Windows 保留全屏高度停靠。macOS `set_size` 经事件循环异步生效，停靠一律使用目标宽度计算，不得事后查询 `outer_size`。
+- **收起态灯带（macOS）**：窗口覆盖整条侧边工作区高度、宽 26pt（给把手 box-shadow 辉光留出渲染空间，窗口过窄会被裁剪）；悬停检测在 Rust 侧以 100ms 光标轮询实现（CGEventGetLocation，无需权限），不依赖 WebView 的 mousemove（非 key 窗口交付不可靠）；悬停展开、离开展开面板 2 秒收起；原生拖拽进行中（`dragging` 标志）暂停收起。Windows 保持 9pt 与点击展开的既有行为。
 - **自动粘贴**：无需记录前台应用——面板从不激活前台 app；恢复时先隐藏面板（系统自动归还焦点）→ 80ms → CGEvent 注入 ⌘V（keycode 0x09 + COMMAND，post HID tap）。需辅助功能权限；未授权降级为"已复制"并首次引导授权（`AXIsProcessTrustedWithOptions` + kAXTrustedCheckOptionPrompt）。
 - **拖出**：原生 `NSDraggingSession`（NSPasteboardItem + NSDraggingItem，`run_on_main_thread` 启动）。文本卡携带 plain/html/rtf 三表示；文件卡/图片卡按路径拖出（图片为受管 PNG 快照），预览图 DPI 与显示尺寸解耦（长边 128pt）。无需任何系统权限。
 - **垃圾区**：拖拽会话结束回调把落点（换算为左上原点屏幕逻辑点）经 `drag://ended` 事件回传，前端换算物理像素后与垃圾区矩形比较；原生拖出经过本窗口时抑制 `onDragDropEvent` 自拖入。

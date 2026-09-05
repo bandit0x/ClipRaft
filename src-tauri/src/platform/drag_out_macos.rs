@@ -22,7 +22,7 @@ use objc2_app_kit::{
 use objc2_foundation::{
     NSAttributedString, NSDictionary, NSMutableArray, NSPoint, NSRect, NSSize, NSString, NSURL,
 };
-use tauri::{AppHandle, Emitter, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use super::{DragEnded, DragPayload};
 
@@ -111,6 +111,11 @@ pub fn start_drag(
     let app_for_drop = app.clone();
     let id_for_drop = payload.id.clone();
     let on_drop = move |point: NSPoint, dropped: bool| {
+        // 拖拽结束：恢复悬停监视器的"离开即收起"
+        app_for_drop
+            .state::<crate::AppState>()
+            .dragging
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         let _ = app_for_drop.emit(
             "drag://ended",
             DragEnded {

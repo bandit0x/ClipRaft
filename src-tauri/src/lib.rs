@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -82,6 +83,9 @@ pub struct AppState {
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     last_active_window: Mutex<Option<usize>>,
     ignored_hashes: Mutex<HashMap<String, Instant>>,
+    // macOS 原生拖拽进行中：悬停监视器据此暂停"离开即收起"
+    #[cfg_attr(windows, allow(dead_code))]
+    dragging: AtomicBool,
 }
 
 impl AppState {
@@ -105,6 +109,7 @@ impl AppState {
             session_resource_dir: Some(session_resource_dir),
             last_active_window: Mutex::new(None),
             ignored_hashes: Mutex::new(HashMap::new()),
+            dragging: AtomicBool::new(false),
         })
     }
 
@@ -117,6 +122,7 @@ impl AppState {
             session_resource_dir: None,
             last_active_window: Mutex::new(None),
             ignored_hashes: Mutex::new(HashMap::new()),
+            dragging: AtomicBool::new(false),
         }
     }
 
@@ -843,6 +849,20 @@ fn set_panel_width(window: &WebviewWindow, logical_width: f64) -> Result<u32, St
     Ok(width)
 }
 
+/// 收起态。macOS：窄条覆盖整条侧边工作区（悬停热区全长），
+/// 宽度 26pt 给把手呼吸辉光留出渲染空间（box-shadow 会被窗口边界裁剪）；
+/// Windows：保持 9pt 既有行为。
+#[cfg(target_os = "macos")]
+fn collapse_window(window: &WebviewWindow) -> Result<(), String> {
+    let width = set_panel_width(window, 26.0)?;
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let area = monitor.work_area();
+        let _ = window.set_size(PhysicalSize::new(width, area.size.height));
+    }
+    dock_window(window, width)
+}
+
+#[cfg(not(target_os = "macos"))]
 fn collapse_window(window: &WebviewWindow) -> Result<(), String> {
     let width = set_panel_width(window, 9.0)?;
     dock_window(window, width)
@@ -883,6 +903,110 @@ fn disable_app_nap() {
         &NSString::from_str("ClipRaft edge panel rendering"),
     );
     std::mem::forget(token);
+}
+
+/// macOS：光标悬停右缘灯带即展开面板，离开展开面板约 2 秒后收起。
+/// 不依赖 WebView 的悬停事件——非 key 窗口的 mousemove 交付不可靠，
+/// 全局光标轮询（无需任何权限）始终有效。
+#[cfg(target_os = "macos")]
+mod edge_hover {
+    use std::os::raw::c_void;
+
+    #[repr(C)]
+    pub struct CGPoint {
+        pub x: f64,
+        pub y: f64,
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreate(source: *const c_void) -> *mut c_void;
+        fn CGEventGetLocation(event: *mut c_void) -> CGPoint;
+        fn CFRelease(cf: *mut c_void);
+    }
+
+    /// 全局光标位置：CGEvent 坐标系为左上原点的逻辑点，与窗口矩形换算一致。
+    pub fn cursor_location() -> CGPoint {
+        unsafe {
+            let event = CGEventCreate(std::ptr::null());
+            if event.is_null() {
+                return CGPoint {
+                    x: f64::NAN,
+                    y: f64::NAN,
+                };
+            }
+            let point = CGEventGetLocation(event);
+            CFRelease(event);
+            point
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn start_edge_hover_watcher(app: AppHandle) {
+    thread::Builder::new()
+        .name("clipraft-edge-hover".to_string())
+        .spawn(move || {
+            const COLLAPSED_MAX_PT: f64 = 60.0;
+            const LEAVE_COLLAPSE_MS: u64 = 2000;
+            let mut outside_since: Option<Instant> = None;
+            let mut hover_expanded = false;
+            loop {
+                thread::sleep(Duration::from_millis(100));
+                let Some(window) = app.get_webview_window("main") else {
+                    continue;
+                };
+                if !window.is_visible().unwrap_or(false) {
+                    outside_since = None;
+                    hover_expanded = false;
+                    continue;
+                }
+                let (Ok(position), Ok(size)) = (window.outer_position(), window.outer_size())
+                else {
+                    continue;
+                };
+                let Ok(scale) = window.scale_factor() else {
+                    continue;
+                };
+                if scale <= 0.0 {
+                    continue;
+                }
+                let dragging = app.state::<AppState>().dragging.load(Ordering::Relaxed);
+                if dragging {
+                    outside_since = None;
+                    continue;
+                }
+                let point = edge_hover::cursor_location();
+                let (wx, wy) = (position.x as f64 / scale, position.y as f64 / scale);
+                let (ww, wh) = (size.width as f64 / scale, size.height as f64 / scale);
+                let inside =
+                    point.x >= wx && point.x <= wx + ww && point.y >= wy && point.y <= wy + wh;
+                if ww <= COLLAPSED_MAX_PT {
+                    if inside && !hover_expanded {
+                        hover_expanded = true;
+                        expand_window(&app, false);
+                    } else if !inside {
+                        hover_expanded = false;
+                    }
+                    outside_since = None;
+                } else if inside {
+                    outside_since = None;
+                } else {
+                    match outside_since {
+                        None => outside_since = Some(Instant::now()),
+                        Some(since)
+                            if since.elapsed() >= Duration::from_millis(LEAVE_COLLAPSE_MS) =>
+                        {
+                            outside_since = None;
+                            hover_expanded = false;
+                            let _ = collapse_window(&window);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        })
+        .expect("failed to start ClipRaft edge hover watcher");
 }
 
 fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -1321,8 +1445,12 @@ fn set_panel_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
-    let width = set_panel_width(&window, if expanded { 184.0 } else { 9.0 })?;
-    dock_window(&window, width)
+    if expanded {
+        let width = set_panel_width(&window, 184.0)?;
+        dock_window(&window, width)
+    } else {
+        collapse_window(&window)
+    }
 }
 
 /// 用户显式交互（悬停/点击把手/打开面板）后允许面板取得键盘焦点。
@@ -1404,6 +1532,9 @@ pub fn run() {
             // macOS 全局快捷键：⌥⌘V 恢复并粘贴最新卡片
             #[cfg(target_os = "macos")]
             setup_global_paste_shortcut(app.handle())?;
+            // macOS：悬停右缘灯带展开 / 离开收起
+            #[cfg(target_os = "macos")]
+            start_edge_hover_watcher(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
