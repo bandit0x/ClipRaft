@@ -82,9 +82,10 @@ pub fn send_paste() -> Result<(), String> {
 /// 原生拖出：把载荷派发到主线程启动 NSDraggingSession（无需任何系统权限）。
 /// macOS 上 `run_on_main_thread` 派发后立即返回，落点通过 `drag://ended` 事件回传。
 pub fn start_drag_out(app: AppHandle, payload: DragPayload) -> Result<(), String> {
-    // 文本卡片走"松手即粘贴"（与 Windows 同语义）：聊天框等目标不接受
-    // 文本拖入，原生文本拖拽落不进去；文件/图片卡片走原生拖拽会话（已验证可用）。
-    if payload.plain.is_some() {
+    // 按卡片模态路由：文本卡走"松手即粘贴"（与 Windows 同语义——聊天框等目标
+    // 不接受文本拖入）；文件/图片卡走原生拖拽会话（文件卡可能同时带 text/plain
+    // 伴随表示，但模态仍是文件，必须按文件拖出）。
+    if payload.kind == "text" && payload.plain.is_some() {
         return start_text_paste_drag(app, payload);
     }
     // 拖拽期间悬停监视器暂停"离开即收起"

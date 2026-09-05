@@ -66,6 +66,7 @@ struct StoredRepresentation {
 #[derive(Debug, Clone)]
 struct RestorePayload {
     hash: String,
+    kind: String,
     representations: Vec<StoredRepresentation>,
 }
 
@@ -433,12 +434,12 @@ impl SqliteStore {
     }
 
     fn payload_by_id(&self, id: &str) -> Result<RestorePayload, String> {
-        let hash = self
+        let (hash, kind) = self
             .connection
             .query_row(
-                "SELECT hash FROM clips WHERE id = ?1 AND deleted_at IS NULL",
+                "SELECT hash, kind FROM clips WHERE id = ?1 AND deleted_at IS NULL",
                 params![id],
-                |row| row.get::<_, String>(0),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )
             .map_err(|error| error.to_string())?;
         let mut statement = self
@@ -462,6 +463,7 @@ impl SqliteStore {
             .map_err(|error| error.to_string())?;
         Ok(RestorePayload {
             hash,
+            kind,
             representations,
         })
     }
@@ -803,16 +805,25 @@ impl ClipboardHandler for ClipboardChangeHandler {
         };
         if let Some(card) = ingest_capture(&state, capture) {
             platform::remember_paste_target(&state);
-            expand_window(&self.app, false);
+            expand_window(&self.app, PanelOpenKind::Peek);
             let _ = self.app.emit(CLIPBOARD_UPDATED, card);
         }
     }
 }
 
-/// 展开/停靠面板并显示。
-/// `explicit` 表示用户主动打开（托盘、快捷键、点击把手）：此时才允许取得键盘焦点；
-/// 复制触发的预览（`explicit = false`）在 macOS 上必须保持不可聚焦（ADR-0002）。
-fn expand_window(app: &AppHandle, explicit: bool) {
+/// 展开方式的语义（ADR-0002）：
+/// - Peek：复制触发的预览，不抢焦点，窗口保持不可聚焦；
+/// - Hover：悬停灯带属于"显式交互"，窗口恢复可聚焦（点击才取得 key，不主动 set_focus）；
+/// - Explicit：托盘/快捷键打开，可聚焦并主动取得焦点。
+/// 注意 macOS 上不可聚焦的窗口连点击都不交付（见悬停测试），故 Hover 必须恢复可聚焦。
+#[derive(Clone, Copy, PartialEq)]
+enum PanelOpenKind {
+    Peek,
+    Hover,
+    Explicit,
+}
+
+fn expand_window(app: &AppHandle, kind: PanelOpenKind) {
     if let Some(window) = app.get_webview_window("main") {
         match set_panel_width(&window, 184.0) {
             Ok(width) => {
@@ -822,11 +833,11 @@ fn expand_window(app: &AppHandle, explicit: bool) {
         }
         #[cfg(target_os = "macos")]
         {
-            let _ = window.set_focusable(explicit);
+            let _ = window.set_focusable(kind != PanelOpenKind::Peek);
         }
         let _ = window.show();
         let _ = window.unminimize();
-        if explicit {
+        if kind == PanelOpenKind::Explicit {
             let _ = window.set_focus();
         }
         let _ = app.emit(PANEL_OPENED, ());
@@ -983,7 +994,7 @@ fn start_edge_hover_watcher(app: AppHandle) {
                 if ww <= COLLAPSED_MAX_PT {
                     if inside && !hover_expanded {
                         hover_expanded = true;
-                        expand_window(&app, false);
+                        expand_window(&app, PanelOpenKind::Hover);
                     } else if !inside {
                         hover_expanded = false;
                     }
@@ -1008,6 +1019,227 @@ fn start_edge_hover_watcher(app: AppHandle) {
         .expect("failed to start ClipRaft edge hover watcher");
 }
 
+/// 临时诊断：前端事件链路写入 /tmp/clipraft-test.log（验证后移除）。
+#[tauri::command]
+fn test_log(payload: String) -> Result<(), String> {
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/clipraft-test.log")
+    {
+        let _ = writeln!(file, "{payload}");
+    }
+    Ok(())
+}
+
+/// 临时诊断：是否处于端到端测试模式（验证后移除）。
+#[tauri::command]
+fn test_mode() -> bool {
+    std::env::var("CLIPRAFT_TRASH_TEST").as_deref() == Ok("1")
+}
+
+/// 临时端到端验证（CLIPRAFT_TRASH_TEST 触发，验证后移除）：
+/// =1 真实 CGEvent 拖拽；=2 JS 直接向 DOM 派发 PointerEvent（标题回传诊断）。
+/// 结果由 SQLite 的 deleted_at 客观判定。
+#[cfg(target_os = "macos")]
+fn start_trash_flow_test(app: AppHandle) {
+    use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType, CGMouseButton};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    use std::io::Write;
+
+    let log = |msg: &str| {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/clipraft-test.log")
+        {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or_default();
+            let _ = writeln!(file, "[{stamp}] {msg}");
+        }
+    };
+
+    thread::Builder::new()
+        .name("clipraft-trash-test".to_string())
+        .spawn(move || {
+            let mode = std::env::var("CLIPRAFT_TRASH_TEST").unwrap_or_default();
+            log(&format!(
+                "mode={mode} accessibility_trusted={}",
+                platform::accessibility_trusted()
+            ));
+
+            // 1. 写入测试文本 → 监听器捕获建卡并展开面板
+            let context = match clipboard_rs::ClipboardContext::new() {
+                Ok(context) => context,
+                Err(error) => {
+                    log(&format!("clipboard context failed: {error}"));
+                    return;
+                }
+            };
+            if let Err(error) = context.set(vec![clipboard_rs::ClipboardContent::Text(
+                "TRASH-TEST-CARD-0905-C".to_string(),
+            )]) {
+                log(&format!("clipboard set failed: {error}"));
+                return;
+            }
+            log("test text written to clipboard");
+            thread::sleep(Duration::from_millis(1200));
+
+            let Some(window) = app.get_webview_window("main") else {
+                log("no main window");
+                return;
+            };
+            let Ok(scale) = window.scale_factor() else {
+                log("no scale factor");
+                return;
+            };
+            let Ok(position) = window.outer_position() else {
+                log("no window position");
+                return;
+            };
+            let wx = position.x as f64 / scale;
+            let wy = position.y as f64 / scale;
+
+            // 2. 光标移到灯带上 → 悬停展开并保持（两种模式都需要）
+            if let Ok(source) = CGEventSource::new(CGEventSourceStateID::CombinedSessionState) {
+                let post = |event_type: CGEventType, point: core_graphics::geometry::CGPoint| {
+                    if let Ok(event) = CGEvent::new_mouse_event(
+                        source.clone(),
+                        event_type,
+                        point,
+                        CGMouseButton::Left,
+                    ) {
+                        event.post(CGEventTapLocation::HID);
+                    }
+                    thread::sleep(Duration::from_millis(25));
+                };
+                post(
+                    CGEventType::MouseMoved,
+                    core_graphics::geometry::CGPoint {
+                        x: wx + 15.0,
+                        y: wy + 660.0,
+                    },
+                );
+                log("cursor moved onto the strip");
+            }
+            thread::sleep(Duration::from_millis(1200));
+            let (expanded_w, wh) = (
+                window
+                    .outer_size()
+                    .map(|size| size.width as f64 / scale)
+                    .unwrap_or(0.0),
+                window
+                    .outer_size()
+                    .map(|size| size.height as f64 / scale)
+                    .unwrap_or(1299.0),
+            );
+            log(&format!("window logical size after hover = {expanded_w} x {wh}"));
+
+            // =1：真实 CGEvent 拖拽
+            if mode == "1" {
+                if !platform::accessibility_trusted() {
+                    log("not trusted, abort");
+                    return;
+                }
+                let source = match CGEventSource::new(CGEventSourceStateID::CombinedSessionState) {
+                    Ok(source) => source,
+                    Err(_) => {
+                        log("event source failed");
+                        return;
+                    }
+                };
+                let pid = std::process::id() as i32;
+                let post = |event_type: CGEventType, point: core_graphics::geometry::CGPoint| {
+                    if let Ok(event) = CGEvent::new_mouse_event(
+                        source.clone(),
+                        event_type,
+                        point,
+                        CGMouseButton::Left,
+                    ) {
+                        // 点击计数必须置 1，否则 WebKit 不把它当作真实点击序列
+                        event.set_integer_value_field(
+                            1u32, // kCGMouseEventClickState
+                            1,
+                        );
+                        event.post_to_pid(pid);
+                    }
+                    thread::sleep(Duration::from_millis(25));
+                };
+                let raft = core_graphics::geometry::CGPoint {
+                    x: wx + expanded_w / 2.0,
+                    y: wy + 240.0,
+                };
+                post(CGEventType::LeftMouseDown, raft);
+                log("mouse down on first raft");
+                thread::sleep(Duration::from_millis(200));
+                let trash = core_graphics::geometry::CGPoint {
+                    x: wx + expanded_w / 2.0,
+                    y: wy + wh - 119.0,
+                };
+                let steps = 36;
+                for i in 1..=steps {
+                    let t = i as f64 / steps as f64;
+                    post(
+                        CGEventType::LeftMouseDragged,
+                        core_graphics::geometry::CGPoint {
+                            x: raft.x + (trash.x - raft.x) * t,
+                            y: raft.y + (trash.y - raft.y) * t,
+                        },
+                    );
+                }
+                log("dragged to trash bay");
+                thread::sleep(Duration::from_millis(350));
+                post(CGEventType::LeftMouseUp, trash);
+                log("released over trash bay");
+                thread::sleep(Duration::from_millis(1000));
+                return;
+            }
+
+            // =2：JS 直接派发 PointerEvent，诊断经 document.title 回传
+            if mode == "2" {
+                let read_title = |step: &str| {
+                    thread::sleep(Duration::from_millis(400));
+                    let title = window.title().unwrap_or_default();
+                    log(&format!("[title:{step}] {title}"));
+                };
+                match window.eval(
+                    "(() => { try { const t = typeof window.__TAURI__; const i = t === 'object' ? typeof window.__TAURI__.core : 'n/a'; window.__TAURI_INTERNALS__.invoke('test_log', { payload: '[eval] tauri=' + t + ' core=' + i }); window.__TAURI__.core.invoke('history_list').then(r => window.__TAURI_INTERNALS__.invoke('test_log', { payload: '[eval] history ok len=' + r.length })).catch(e => window.__TAURI_INTERNALS__.invoke('test_log', { payload: '[eval] history reject ' + String(e) })); } catch (e) { window.__TAURI_INTERNALS__.invoke('test_log', { payload: '[eval] throw ' + String(e) }); } })();",
+                ) {
+                    Ok(()) => log("boot eval dispatched Ok"),
+                    Err(e) => log(&format!("boot eval ERROR: {e}")),
+                }
+                {
+                    let app_for_eval = app.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        if let Some(w) = app_for_eval.get_webview_window("main") {
+                            let _ = w.eval(
+                                "window.__TAURI_INTERNALS__.invoke('test_log', { payload: '[eval-main] internals=' + typeof window.__TAURI_INTERNALS__ + ' invoke=' + typeof window.__TAURI_INTERNALS__.invoke });",
+                            );
+                        }
+                    });
+                }
+                thread::sleep(Duration::from_millis(600));
+                read_title("boot");
+                let _ = window.eval(
+                    "(() => { const r = document.querySelector('.raft-card'); window.__TAURI__.core.invoke('test_log', { payload: '[js] raft query done' }).catch(() => {}); document.title = 'S1 raft=' + (r ? Math.round(r.getBoundingClientRect().left) + ',' + Math.round(r.getBoundingClientRect().top) + ' w=' + window.innerWidth : 'none'); })();",
+                );
+                read_title("raft");
+                let _ = window.eval(
+                    "(async () => { try { const raft = document.querySelector('.raft-card'); if (!raft) { document.title = 'S2 no-raft'; return; } const r = raft.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2; const mk = (type, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 7, pointerType: 'mouse', isPrimary: true }); raft.dispatchEvent(mk('pointerdown', cx, cy)); for (let i = 1; i <= 10; i++) { raft.dispatchEvent(mk('pointermove', cx + (window.innerWidth / 2 - cx) * i / 10, cy + (window.innerHeight - 140 - cy) * i / 10)); await new Promise(rr => setTimeout(rr, 35)); } const bay = document.querySelector('.trash-bay'); window.__TAURI__.core.invoke('test_log', { payload: '[js] dragged, bay query done' }).catch(() => {}); document.title = 'S2 dragged bay=' + (bay ? Math.round(bay.getBoundingClientRect().left) + ',' + Math.round(bay.getBoundingClientRect().top) : 'none'); if (!bay) return; const b = bay.getBoundingClientRect(); const tx = b.left + b.width / 2, ty = b.top + b.height / 2; for (let i = 1; i <= 5; i++) { raft.dispatchEvent(mk('pointermove', tx, ty)); await new Promise(rr => setTimeout(rr, 30)); } raft.dispatchEvent(mk('pointerup', tx, ty)); window.__TAURI__.core.invoke('test_log', { payload: '[js] pointerup dispatched' }).catch(() => {}); document.title = 'S3 pointerup dispatched'; setTimeout(() => { document.title = 'S4 done'; }, 800); } catch (e) { window.__TAURI__.core.invoke('test_log', { payload: '[js] ERR ' + String(e) }).catch(() => {}); document.title = 'ERR ' + String(e); } })();",
+                );
+                for _ in 0..8 {
+                    read_title("seq");
+                }
+                return;
+            }
+            log("unknown mode");
+        })
+        .expect("failed to start trash flow test");
+}
+
 fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let show_item = MenuItem::with_id(app, "show", "打开 ClipRaft", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出 ClipRaft", true, None::<&str>)?;
@@ -1023,7 +1255,7 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .show_menu_on_left_click(false)
         .tooltip("ClipRaft")
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => expand_window(app, true),
+            "show" => expand_window(app, PanelOpenKind::Explicit),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -1038,7 +1270,7 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     if window.is_visible().unwrap_or(false) {
                         let _ = window.hide();
                     } else {
-                        expand_window(tray.app_handle(), true);
+                        expand_window(tray.app_handle(), PanelOpenKind::Explicit);
                     }
                 }
             }
@@ -1254,6 +1486,7 @@ fn build_drag_payload(id: &str, payload: &RestorePayload) -> Result<DragPayload,
     Ok(DragPayload {
         id: id.to_string(),
         hash: payload.hash.clone(),
+        kind: payload.kind.clone(),
         contents: contents_from_payload(payload.clone()).map(|(_, contents)| contents)?,
         files,
         plain,
@@ -1267,9 +1500,43 @@ fn build_drag_payload(id: &str, payload: &RestorePayload) -> Result<DragPayload,
 /// Windows 后台监视（光标跟踪 + 左键释放粘贴）或 macOS 原生拖拽会话。
 #[tauri::command]
 async fn start_clip_drag_monitor(id: String, app: AppHandle) -> Result<(), String> {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/clipraft-test.log")
+    {
+        use std::io::Write as _;
+        let _ = writeln!(f, "[drag-monitor] invoked for {id}");
+    }
     let state: State<AppState> = app.state();
-    let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
-    let drag = build_drag_payload(&id, &payload)?;
+    let payload = match state.with_active_store(|store| store.payload_by_id(&id)) {
+        Ok(p) => p,
+        Err(e) => {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/clipraft-test.log")
+            {
+                use std::io::Write as _;
+                let _ = writeln!(f, "[drag-monitor] payload failed: {e}");
+            }
+            return Err(e);
+        }
+    };
+    let drag = match build_drag_payload(&id, &payload) {
+        Ok(d) => d,
+        Err(e) => {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/clipraft-test.log")
+            {
+                use std::io::Write as _;
+                let _ = writeln!(f, "[drag-monitor] payload build failed: {e}");
+            }
+            return Err(e);
+        }
+    };
 
     {
         let mut ignored = state
@@ -1534,6 +1801,11 @@ pub fn run() {
             // macOS：悬停右缘灯带展开 / 离开收起
             #[cfg(target_os = "macos")]
             start_edge_hover_watcher(app.handle().clone());
+            // 临时端到端验证：CLIPRAFT_TRASH_TEST=1 时自动走"拖文本卡到垃圾区"（验证后移除）
+            #[cfg(target_os = "macos")]
+            if std::env::var("CLIPRAFT_TRASH_TEST").is_ok() {
+                start_trash_flow_test(app.handle().clone());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1554,7 +1826,9 @@ pub fn run() {
             set_panel_expanded,
             focus_panel,
             check_paste_permission,
-            request_paste_permission
+            request_paste_permission,
+            test_log,
+            test_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipRaft");

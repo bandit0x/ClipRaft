@@ -108,9 +108,39 @@ pub fn start_drag(
             frame.origin.y + frame.size.height
         })
         .unwrap_or(0.0);
+    {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/clipraft-test.log")
+        {
+            let _ = writeln!(
+                f,
+                "[drag-session] started id={} files={} plain={}",
+                payload.id,
+                payload.files.len(),
+                payload.plain.is_some()
+            );
+        }
+    }
     let app_for_drop = app.clone();
     let id_for_drop = payload.id.clone();
     let on_drop = move |point: NSPoint, dropped: bool| {
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/clipraft-test.log")
+            {
+                let _ = writeln!(
+                    f,
+                    "[drag-session] ended at ({:.0},{:.0}) dropped={}",
+                    point.x, point.y, dropped
+                );
+            }
+        }
         // 拖拽结束：恢复悬停监视器的"离开即收起"
         app_for_drop
             .state::<crate::AppState>()

@@ -17,6 +17,7 @@ use std::path::PathBuf;
 pub struct DragPayload {
     pub id: String,
     pub hash: String,
+    pub kind: String,
     // 仅 Windows 平台实现读取（拖出后写回剪贴板），macOS 由拖拽会话直接携带数据
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub contents: Vec<ClipboardContent>,
