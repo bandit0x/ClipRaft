@@ -243,6 +243,8 @@ function App() {
     clearAutoCollapse();
     setExpanded(true);
     void invoke("set_panel_expanded", { expanded: true });
+    // 点击把手是显式交互：恢复面板可聚焦（macOS 复制预览期间不可聚焦）
+    if (!peek) void invoke("focus_panel").catch(() => undefined);
     if (peek) {
       autoCollapseTimerRef.current = window.setTimeout(() => {
         setExpanded(false);
@@ -255,6 +257,8 @@ function App() {
     clearAutoCollapse();
     setExpanded(true);
     void invoke("set_panel_expanded", { expanded: true });
+    // 悬停属于 ADR-0002 允许取得焦点的显式交互
+    void invoke("focus_panel").catch(() => undefined);
   }, [clearAutoCollapse]);
 
   const refresh = useCallback(async () => {

@@ -792,18 +792,28 @@ impl ClipboardHandler for ClipboardChangeHandler {
         };
         if let Some(card) = ingest_capture(&state, capture) {
             platform::remember_paste_target(&state);
-            expand_window(&self.app);
+            expand_window(&self.app, false);
             let _ = self.app.emit(CLIPBOARD_UPDATED, card);
         }
     }
 }
 
-fn expand_window(app: &AppHandle) {
+/// 展开/停靠面板并显示。
+/// `explicit` 表示用户主动打开（托盘、快捷键、点击把手）：此时才允许取得键盘焦点；
+/// 复制触发的预览（`explicit = false`）在 macOS 上必须保持不可聚焦（ADR-0002）。
+fn expand_window(app: &AppHandle, explicit: bool) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = set_panel_width(&window, 184.0);
         let _ = dock_window(&window);
+        #[cfg(target_os = "macos")]
+        {
+            let _ = window.set_focusable(explicit);
+        }
         let _ = window.show();
         let _ = window.unminimize();
+        if explicit {
+            let _ = window.set_focus();
+        }
         let _ = app.emit(PANEL_OPENED, ());
     }
 }
@@ -831,8 +841,20 @@ fn dock_window(window: &WebviewWindow) -> Result<(), String> {
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "ClipRaft monitor unavailable".to_string())?;
     let window_size = window.outer_size().map_err(|error| error.to_string())?;
-    let x = monitor.position().x + monitor.size().width as i32 - window_size.width as i32;
-    let y = monitor.position().y;
+    // macOS 用 work_area 避开菜单栏与程序坞；Windows 保持全屏高度停靠的既有行为
+    #[cfg(target_os = "macos")]
+    let (monitor_x, monitor_y, monitor_width) = {
+        let area = monitor.work_area();
+        (area.position.x, area.position.y, area.size.width as i32)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let (monitor_x, monitor_y, monitor_width) = (
+        monitor.position().x,
+        monitor.position().y,
+        monitor.size().width as i32,
+    );
+    let x = monitor_x + monitor_width - window_size.width as i32;
+    let y = monitor_y;
     window
         .set_position(PhysicalPosition::new(x, y))
         .map_err(|error| error.to_string())
@@ -847,13 +869,13 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .ok_or("ClipRaft tray icon unavailable")?;
 
-    TrayIconBuilder::new()
+    let builder = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .tooltip("ClipRaft")
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => expand_window(app),
+            "show" => expand_window(app, true),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -868,12 +890,15 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     if window.is_visible().unwrap_or(false) {
                         let _ = window.hide();
                     } else {
-                        expand_window(tray.app_handle());
+                        expand_window(tray.app_handle(), true);
                     }
                 }
             }
-        })
-        .build(app)?;
+        });
+    // macOS 菜单栏用单色模板图标，跟随深/浅色外观
+    #[cfg(target_os = "macos")]
+    let builder = builder.icon_as_template(true);
+    builder.build(app)?;
     Ok(())
 }
 
@@ -888,13 +913,16 @@ fn start_clipboard_watcher(app: AppHandle) {
                     return;
                 }
             };
-            let mut watcher = match ClipboardWatcherContext::new() {
-                Ok(watcher) => watcher,
-                Err(error) => {
-                    println!("ClipRaft clipboard watcher failed: {error}");
-                    return;
-                }
-            };
+            // macOS 无剪贴板变更事件，只能轮询 changeCount：120ms 是 EcoPaste
+            // 验证过的响应性/功耗折中；Windows 事件驱动下该参数被忽略
+            let mut watcher =
+                match ClipboardWatcherContext::new_with_interval(Duration::from_millis(120)) {
+                    Ok(watcher) => watcher,
+                    Err(error) => {
+                        println!("ClipRaft clipboard watcher failed: {error}");
+                        return;
+                    }
+                };
             watcher.add_handler(ClipboardChangeHandler { app, reader });
             watcher.start_watch();
         })
@@ -1176,11 +1204,34 @@ fn set_panel_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
     dock_window(&window)
 }
 
+/// 用户显式交互（悬停/点击把手/打开面板）后允许面板取得键盘焦点。
+/// 仅 macOS 需要：复制预览期间窗口被设为不可聚焦（ADR-0002 焦点契约）。
+#[tauri::command]
+fn focus_panel(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
+        window
+            .set_focusable(true)
+            .map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+    }
+    let _ = app;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // macOS：托盘常驻，不显示 Dock 图标（对应 Windows skipTaskbar）
+            #[cfg(target_os = "macos")]
+            app.handle()
+                .set_activation_policy(tauri::ActivationPolicy::Accessory)
+                .map_err(|error| format!("ClipRaft activation policy failed: {error}"))?;
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -1216,7 +1267,8 @@ pub fn run() {
             set_history_persistence,
             get_auto_paste,
             set_auto_paste,
-            set_panel_expanded
+            set_panel_expanded,
+            focus_panel
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipRaft");
