@@ -521,15 +521,25 @@ function App() {
         });
         return;
       }
-      setNotice("拖动中：松手粘贴到光标下的窗口");
+      setNotice("拖动中：松手粘贴到光标下的窗口；拖回漩涡可删除");
+      ghostActiveRef.current = true;
       setGhost({ label: card.preview.slice(0, 26), x: origin.x, y: origin.y, card });
+      const pointerOverTrash = (event: PointerEvent) => {
+        const bay = trashBayRef.current;
+        if (!bay) return false;
+        const r = bay.getBoundingClientRect();
+        return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+      };
       const move = (event: PointerEvent) => {
+        lastPointerRef.current = { x: event.clientX, y: event.clientY };
         setGhost((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current));
+        setDraggingOverTrash(pointerOverTrash(event));
       };
       const done = () => {
         window.removeEventListener("pointermove", move);
         ghostActiveRef.current = false;
         setGhost(null);
+        setDraggingOverTrash(false);
         // 松手在面板内：若落在删除区（漩涡）则删除该卡
         const p = lastPointerRef.current;
         const bay = trashBayRef.current;
