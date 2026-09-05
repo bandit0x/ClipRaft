@@ -1,0 +1,3 @@
+# Keep Windows and macOS behavior behind one platform module
+
+The clipboard capture pipeline, history store, and React panel stay platform-agnostic; all foreground-window, paste-injection, and drag-out differences live behind a single `platform` module (`remember_paste_target` / `paste_to_target` / `send_paste` / `start_drag_out`). On Windows the panel records the previous foreground window and replays focus with SendInput; on macOS the panel never activates, hides itself before posting a CGEvent ⌘V (accessibility permission required, degrading to copy-only when ungranted), and drag-out uses native NSDraggingSession instead of cursor polling. macOS copy peeks show with `set_focusable(false)` to honor ADR-0002's no-focus-steal contract.
