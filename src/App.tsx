@@ -194,7 +194,10 @@ function App() {
   // 先按模块期判定渲染，挂载后用 effect 校正一次（防注入时序竞态）
   const [isTauri, setIsTauri] = useState(isTauriEnv());
   useEffect(() => {
-    setIsTauri(isTauriEnv());
+    const tauri = isTauriEnv();
+    setIsTauri(tauri);
+    // 桌面模式若因竞态被误判为浏览器预览，会以展开态启动；校正回收起态
+    if (tauri) setExpanded(false);
   }, []);
   const [cards, setCards] = useState<ClipCard[]>([]);
   const [query, setQuery] = useState("");

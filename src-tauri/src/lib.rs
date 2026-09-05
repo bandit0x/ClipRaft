@@ -808,8 +808,12 @@ impl ClipboardHandler for ClipboardChangeHandler {
 /// 复制触发的预览（`explicit = false`）在 macOS 上必须保持不可聚焦（ADR-0002）。
 fn expand_window(app: &AppHandle, explicit: bool) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = set_panel_width(&window, 184.0);
-        let _ = dock_window(&window);
+        match set_panel_width(&window, 184.0) {
+            Ok(width) => {
+                let _ = dock_window(&window, width);
+            }
+            Err(error) => println!("ClipRaft expand resize failed: {error}"),
+        }
         #[cfg(target_os = "macos")]
         {
             let _ = window.set_focusable(explicit);
@@ -823,29 +827,32 @@ fn expand_window(app: &AppHandle, explicit: bool) {
     }
 }
 
-fn set_panel_width(window: &WebviewWindow, logical_width: f64) -> Result<(), String> {
+/// 调整面板宽度，返回**目标物理宽度**。
+/// macOS 上 set_size 经事件循环异步生效，调用后 outer_size 仍是旧值，
+/// 所以停靠必须使用这里返回的宽度，不能事后查询。
+fn set_panel_width(window: &WebviewWindow, logical_width: f64) -> Result<u32, String> {
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
     let height = window
         .outer_size()
         .map_err(|error| error.to_string())?
         .height;
-    let width = (logical_width * scale_factor).round() as u32;
+    let width = ((logical_width * scale_factor).round() as u32).max(1);
     window
-        .set_size(PhysicalSize::new(width.max(1), height))
-        .map_err(|error| error.to_string())
+        .set_size(PhysicalSize::new(width, height))
+        .map_err(|error| error.to_string())?;
+    Ok(width)
 }
 
 fn collapse_window(window: &WebviewWindow) -> Result<(), String> {
-    set_panel_width(window, 9.0)?;
-    dock_window(window)
+    let width = set_panel_width(window, 9.0)?;
+    dock_window(window, width)
 }
 
-fn dock_window(window: &WebviewWindow) -> Result<(), String> {
+fn dock_window(window: &WebviewWindow, physical_width: u32) -> Result<(), String> {
     let monitor = window
         .current_monitor()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "ClipRaft monitor unavailable".to_string())?;
-    let window_size = window.outer_size().map_err(|error| error.to_string())?;
     // macOS 用 work_area 避开菜单栏与程序坞；Windows 保持全屏高度停靠的既有行为
     #[cfg(target_os = "macos")]
     let (monitor_x, monitor_y, monitor_width) = {
@@ -858,11 +865,24 @@ fn dock_window(window: &WebviewWindow) -> Result<(), String> {
         monitor.position().y,
         monitor.size().width as i32,
     );
-    let x = monitor_x + monitor_width - window_size.width as i32;
+    let x = monitor_x + monitor_width - physical_width as i32;
     let y = monitor_y;
     window
         .set_position(PhysicalPosition::new(x, y))
         .map_err(|error| error.to_string())
+}
+
+/// 常驻托盘、无 Dock 图标、只有一条窄窗的应用极易被 App Nap 节流，
+/// 收起态把手的呼吸动画会因此停摆。声明"延迟关键"活动并保留 token
+/// 至进程结束，让 WKWebView 的合成器持续出帧。
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+    let token = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+        NSActivityOptions::LatencyCritical,
+        &NSString::from_str("ClipRaft edge panel rendering"),
+    );
+    std::mem::forget(token);
 }
 
 fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -1301,12 +1321,8 @@ fn set_panel_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "ClipRaft window unavailable".to_string())?;
-    if expanded {
-        set_panel_width(&window, 184.0)?;
-    } else {
-        collapse_window(&window)?;
-    }
-    dock_window(&window)
+    let width = set_panel_width(&window, if expanded { 184.0 } else { 9.0 })?;
+    dock_window(&window, width)
 }
 
 /// 用户显式交互（悬停/点击把手/打开面板）后允许面板取得键盘焦点。
@@ -1366,6 +1382,8 @@ pub fn run() {
             app.handle()
                 .set_activation_policy(tauri::ActivationPolicy::Accessory)
                 .map_err(|error| format!("ClipRaft activation policy failed: {error}"))?;
+            #[cfg(target_os = "macos")]
+            disable_app_nap();
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -1373,7 +1391,6 @@ pub fn run() {
             app.manage(AppState::open(&data_dir)?);
             if let Some(window) = app.get_webview_window("main") {
                 collapse_window(&window)?;
-                dock_window(&window)?;
                 let close_target = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
