@@ -905,14 +905,15 @@ fn disable_app_nap() {
     std::mem::forget(token);
 }
 
-/// macOS：光标悬停右缘灯带即展开面板，离开展开面板约 2 秒后收起。
-/// 不依赖 WebView 的悬停事件——非 key 窗口的 mousemove 交付不可靠，
-/// 全局光标轮询（无需任何权限）始终有效。
+/// macOS：全局光标读取（无需任何权限）。CGEvent 坐标系为左上原点的逻辑点，
+/// 与窗口矩形的换算一致。
 #[cfg(target_os = "macos")]
 mod edge_hover {
-    use std::os::raw::c_void;
+    use std::ffi::c_void;
+    use std::os::raw::c_uchar;
 
     #[repr(C)]
+    #[derive(Clone, Copy)]
     pub struct CGPoint {
         pub x: f64,
         pub y: f64,
@@ -925,7 +926,6 @@ mod edge_hover {
         fn CFRelease(cf: *mut c_void);
     }
 
-    /// 全局光标位置：CGEvent 坐标系为左上原点的逻辑点，与窗口矩形换算一致。
     pub fn cursor_location() -> CGPoint {
         unsafe {
             let event = CGEventCreate(std::ptr::null());
