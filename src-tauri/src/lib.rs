@@ -837,6 +837,8 @@ fn expand_window(app: &AppHandle, kind: PanelOpenKind) {
         }
         let _ = window.show();
         let _ = window.unminimize();
+        // 仅 macOS 显式打开需要主动取焦（Windows 保持既有行为：show 不抢焦点）
+        #[cfg(target_os = "macos")]
         if kind == PanelOpenKind::Explicit {
             let _ = window.set_focus();
         }

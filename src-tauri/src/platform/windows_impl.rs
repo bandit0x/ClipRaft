@@ -3,6 +3,7 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
+use clipboard_rs::Clipboard;
 use tauri::AppHandle;
 use windows_sys::Win32::Foundation::{HWND, POINT};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
