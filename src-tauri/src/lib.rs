@@ -910,7 +910,6 @@ fn disable_app_nap() {
 #[cfg(target_os = "macos")]
 mod edge_hover {
     use std::ffi::c_void;
-    use std::os::raw::c_uchar;
 
     #[repr(C)]
     #[derive(Clone, Copy)]

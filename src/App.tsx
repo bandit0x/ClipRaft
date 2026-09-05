@@ -505,11 +505,12 @@ function App() {
     setDraggingOverTrash(false);
   };
 
-  /** 拖出：Windows 上木筏影子跟手，越阈值即交 Rust 后台监视（光标跟踪 + 左键释放粘贴）；
-      macOS 上交给原生 NSDraggingSession（AppKit 绘制预览，落点经 drag://ended 回传） */
+  /** 拖出：文件/图片卡在 macOS 走原生 NSDraggingSession（AppKit 绘制预览，
+      落点经 drag://ended 回传）；文本卡与 Windows 全部走影子跟手 + 松手粘贴
+      （聊天框等目标不接受文本拖入，只能以"点击落点 + 粘贴"语义进输入框） */
   const startNativeDrag = useCallback(
     (card: ClipCard, origin: { x: number; y: number }) => {
-      if (isMacPlatform) {
+      if (isMacPlatform && card.kind !== "text") {
         setNotice("拖动中：松手把内容交给目标窗口");
         nativeDraggingRef.current = true;
         setNativeDraggingId(card.id);
