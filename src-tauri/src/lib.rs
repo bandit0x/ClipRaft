@@ -22,6 +22,7 @@ mod platform;
 
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
 const PANEL_OPENED: &str = "panel://opened";
+const PASTE_DEGRADED: &str = "paste://degraded";
 const MAX_CARDS: i64 = 200;
 const IGNORE_WINDOW: Duration = Duration::from_secs(3);
 
@@ -1143,7 +1144,12 @@ fn contents_from_payload(
 }
 
 #[tauri::command]
-fn restore_clip(id: String, auto_paste: bool, state: State<'_, AppState>) -> Result<(), String> {
+fn restore_clip(
+    id: String,
+    auto_paste: bool,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
     let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
     let (hash, contents) = contents_from_payload(payload)?;
     {
@@ -1161,9 +1167,24 @@ fn restore_clip(id: String, auto_paste: bool, state: State<'_, AppState>) -> Res
         return Err(error.to_string());
     }
     if auto_paste {
-        let _ = platform::paste_to_target(&state);
+        // 注入失败不丢内容：内容已进剪贴板，按 spec 安全降级为"已复制"
+        if let Err(error) = platform::paste_to_target(&app, &state) {
+            let _ = app.emit(PASTE_DEGRADED, error);
+        }
     }
     Ok(())
+}
+
+/// 查询粘贴注入所需的系统权限（macOS 辅助功能权限；Windows 恒可用）。
+#[tauri::command]
+fn check_paste_permission() -> Result<bool, String> {
+    Ok(platform::accessibility_trusted())
+}
+
+/// 未授权时触发系统引导（macOS 打开系统设置 → 辅助功能）。
+#[tauri::command]
+fn request_paste_permission() -> Result<bool, String> {
+    Ok(platform::request_accessibility())
 }
 
 #[tauri::command]
@@ -1268,7 +1289,9 @@ pub fn run() {
             get_auto_paste,
             set_auto_paste,
             set_panel_expanded,
-            focus_panel
+            focus_panel,
+            check_paste_permission,
+            request_paste_permission
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipRaft");

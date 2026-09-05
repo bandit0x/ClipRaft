@@ -17,6 +17,15 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::AppState;
 
+/// Windows 注入键击无需系统权限。
+pub fn accessibility_trusted() -> bool {
+    true
+}
+
+pub fn request_accessibility() -> bool {
+    true
+}
+
 /// 记录当前前台窗口，作为后续自动粘贴的目标。
 pub fn remember_paste_target(state: &AppState) {
     let window = unsafe { GetForegroundWindow() };
@@ -29,7 +38,7 @@ pub fn remember_paste_target(state: &AppState) {
 }
 
 /// 把上一个前台窗口带回前台并注入 Ctrl+V。
-pub fn paste_to_target(state: &AppState) -> Result<(), String> {
+pub fn paste_to_target(_app: &AppHandle, state: &AppState) -> Result<(), String> {
     let handle = state
         .last_active_window
         .lock()

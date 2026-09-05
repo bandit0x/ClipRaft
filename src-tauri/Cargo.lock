@@ -535,6 +535,8 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "clipboard-rs",
+ "core-foundation",
+ "core-graphics",
  "rusqlite",
  "serde",
  "serde_json",

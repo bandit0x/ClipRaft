@@ -27,6 +27,10 @@ clipboard-rs = "0.3"
 blake3 = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"
+core-foundation = "0.10"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",

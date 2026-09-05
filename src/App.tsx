@@ -310,9 +310,19 @@ function App() {
     let unlisten: (() => void) | undefined;
     let unlistenDrop: (() => void) | undefined;
     let unlistenPanel: (() => void) | undefined;
+    let unlistenPaste: (() => void) | undefined;
+    let permissionPrompted = false;
     void listen("panel://opened", () => holdPanelOpen())
       .then((cleanup) => { unlistenPanel = cleanup; })
       .catch(() => undefined);
+    void listen<string>("paste://degraded", (event) => {
+      setNotice(`自动粘贴未执行（${event.payload}），内容已复制到剪贴板`);
+      // 首次降级时唤起系统引导（系统设置 → 辅助功能），之后只提示
+      if (!permissionPrompted) {
+        permissionPrompted = true;
+        void invoke<boolean>("request_paste_permission").catch(() => undefined);
+      }
+    }).then((cleanup) => { unlistenPaste = cleanup; }).catch(() => undefined);
     void listen<ClipCard>("clipboard://updated", (event) => {
       openPanel(true);
       setCards((current) => [event.payload, ...current.filter((card) => card.id !== event.payload.id)].slice(0, 200));
@@ -334,7 +344,7 @@ function App() {
         })
         .catch(() => setNotice("文件没有成功靠岸"));
     }).then((cleanup) => { unlistenDrop = cleanup; }).catch(() => undefined);
-    return () => { unlisten?.(); unlistenDrop?.(); unlistenPanel?.(); };
+    return () => { unlisten?.(); unlistenDrop?.(); unlistenPanel?.(); unlistenPaste?.(); };
   }, [holdPanelOpen, openPanel, refresh]);
   useRaftMotion(cards, refs);
 

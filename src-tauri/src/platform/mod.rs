@@ -6,6 +6,7 @@
 //! - [`paste_to_target`]：把内容粘贴回恢复目标；失败时调用方按 spec 安全降级为"已复制"。
 //! - [`send_paste`]：向前台注入粘贴键（Ctrl+V / Cmd+V）。
 //! - [`start_drag_out`]：开始把卡片内容拖出/投递到目标应用。
+//! - [`accessibility_trusted`] / [`request_accessibility`]：注入类操作所需的系统权限。
 
 #[cfg(windows)]
 mod windows_impl;
@@ -24,7 +25,7 @@ mod unsupported {
     use tauri::AppHandle;
 
     pub fn remember_paste_target(_state: &AppState) {}
-    pub fn paste_to_target(_state: &AppState) -> Result<(), String> {
+    pub fn paste_to_target(_app: &AppHandle, _state: &AppState) -> Result<(), String> {
         Err("当前平台不支持自动粘贴".to_string())
     }
     pub fn send_paste() -> Result<(), String> {
@@ -36,6 +37,12 @@ mod unsupported {
         _contents: Vec<ClipboardContent>,
     ) -> Result<(), String> {
         Err("当前平台不支持拖出".to_string())
+    }
+    pub fn accessibility_trusted() -> bool {
+        false
+    }
+    pub fn request_accessibility() -> bool {
+        false
     }
 }
 #[cfg(not(any(windows, target_os = "macos")))]
