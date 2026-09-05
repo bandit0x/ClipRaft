@@ -1225,14 +1225,11 @@ fn contents_from_payload(
     Ok((payload.hash, contents))
 }
 
-#[tauri::command]
-fn restore_clip(
-    id: String,
-    auto_paste: bool,
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<(), String> {
-    let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
+/// 恢复卡片到系统剪贴板，可选把内容粘贴进此前的前台应用。
+/// restore_clip 命令与全局粘贴快捷键共用此路径。
+fn restore_clip_inner(app: &AppHandle, id: &str, auto_paste: bool) -> Result<(), String> {
+    let state: State<AppState> = app.state();
+    let payload = state.with_active_store(|store| store.payload_by_id(id))?;
     let (hash, contents) = contents_from_payload(payload)?;
     {
         let mut ignored = state
@@ -1250,11 +1247,16 @@ fn restore_clip(
     }
     if auto_paste {
         // 注入失败不丢内容：内容已进剪贴板，按 spec 安全降级为"已复制"
-        if let Err(error) = platform::paste_to_target(&app, &state) {
+        if let Err(error) = platform::paste_to_target(app, &state) {
             let _ = app.emit(PASTE_DEGRADED, error);
         }
     }
     Ok(())
+}
+
+#[tauri::command]
+fn restore_clip(id: String, auto_paste: bool, app: AppHandle) -> Result<(), String> {
+    restore_clip_inner(&app, &id, auto_paste)
 }
 
 /// 查询粘贴注入所需的系统权限（macOS 辅助功能权限；Windows 恒可用）。
@@ -1325,6 +1327,35 @@ fn focus_panel(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// macOS 全局快捷键 ⌥⌘V：把最新木筏恢复并粘贴到前台应用
+/// （对应 spec 的 Win+Alt+V；Windows 沿用面板内 F9）。
+#[cfg(target_os = "macos")]
+fn setup_global_paste_shortcut(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    use std::str::FromStr;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let paste_latest = Shortcut::from_str("cmd+alt+v")?;
+    app.plugin(
+        tauri_plugin_global_shortcut::Builder::new()
+            .with_handler(move |app, shortcut, event| {
+                if *shortcut != paste_latest || event.state() != ShortcutState::Pressed {
+                    return;
+                }
+                let state: State<AppState> = app.state();
+                let latest = match state.with_active_store(|store| store.list()) {
+                    Ok(cards) if !cards.is_empty() => cards[0].id.clone(),
+                    _ => return,
+                };
+                if let Err(error) = restore_clip_inner(app, &latest, true) {
+                    println!("ClipRaft global paste failed: {error}");
+                }
+            })
+            .build(),
+    )?;
+    app.global_shortcut().register(paste_latest)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1353,6 +1384,9 @@ pub fn run() {
             }
             setup_tray(app)?;
             start_clipboard_watcher(app.handle().clone());
+            // macOS 全局快捷键：⌥⌘V 恢复并粘贴最新卡片
+            #[cfg(target_os = "macos")]
+            setup_global_paste_shortcut(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
