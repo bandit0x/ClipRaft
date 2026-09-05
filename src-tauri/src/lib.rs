@@ -20,6 +20,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, 
 
 mod platform;
 
+use platform::DragPayload;
+
 const CLIPBOARD_UPDATED: &str = "clipboard://updated";
 const PANEL_OPENED: &str = "panel://opened";
 const PASTE_DEGRADED: &str = "paste://degraded";
@@ -52,7 +54,7 @@ struct ClipboardCapture {
     representations: Vec<CapturedRepresentation>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct StoredRepresentation {
     format: String,
     text_value: Option<String>,
@@ -60,7 +62,7 @@ struct StoredRepresentation {
     resource_path: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RestorePayload {
     hash: String,
     representations: Vec<StoredRepresentation>,
@@ -76,6 +78,8 @@ pub struct AppState {
     session_store: Mutex<SqliteStore>,
     persistence_enabled: Mutex<bool>,
     session_resource_dir: Option<PathBuf>,
+    // 仅 Windows 平台实现读写（前台窗口记录），macOS 无需恢复目标
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     last_active_window: Mutex<Option<usize>>,
     ignored_hashes: Mutex<HashMap<String, Instant>>,
 }
@@ -1038,23 +1042,101 @@ fn clip_drag_targets(state: &AppState, id: &str) -> Result<(Vec<PathBuf>, Option
     Ok((paths, plain_text))
 }
 
+/// 把存储载荷整理成跨平台拖出载荷：Windows 需要可写回剪贴板的表示，
+/// macOS 需要文件路径 / 文本表示 / 图片快照预览。
+fn build_drag_payload(id: &str, payload: &RestorePayload) -> Result<DragPayload, String> {
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut image_path: Option<PathBuf> = None;
+    let mut plain: Option<String> = None;
+    let mut html: Option<String> = None;
+    let mut rtf: Option<String> = None;
+    let mut preview_png: Option<Vec<u8>> = None;
+
+    for representation in &payload.representations {
+        match representation.format.as_str() {
+            "files" => {
+                if let Some(value) = &representation.text_value {
+                    let stored: Vec<String> =
+                        serde_json::from_str(value).map_err(|error| error.to_string())?;
+                    for path in stored {
+                        if Path::new(&path).exists() {
+                            files.push(PathBuf::from(&path));
+                        }
+                    }
+                }
+            }
+            "image/png" => {
+                if let Some(path) = &representation.resource_path {
+                    if Path::new(path).exists() && image_path.is_none() {
+                        image_path = Some(PathBuf::from(path));
+                    }
+                }
+            }
+            "text/plain" => {
+                if plain.is_none() {
+                    plain = representation
+                        .text_value
+                        .clone()
+                        .filter(|v| !v.trim().is_empty());
+                }
+            }
+            "text/html" => {
+                html = representation
+                    .text_value
+                    .clone()
+                    .filter(|v| !v.trim().is_empty());
+            }
+            "text/rtf" => {
+                rtf = representation
+                    .text_value
+                    .clone()
+                    .filter(|v| !v.trim().is_empty());
+            }
+            _ => {}
+        }
+    }
+
+    // 图片卡没有真实文件时按其 PNG 快照文件拖出（与 Windows 行为一致）
+    if files.is_empty() {
+        if let Some(path) = image_path {
+            preview_png = fs::read(&path).ok();
+            files.push(path);
+        }
+    }
+
+    if files.is_empty() && plain.is_none() {
+        return Err("没有可拖出的内容".to_string());
+    }
+
+    Ok(DragPayload {
+        id: id.to_string(),
+        hash: payload.hash.clone(),
+        contents: contents_from_payload(payload.clone()).map(|(_, contents)| contents)?,
+        files,
+        plain,
+        html,
+        rtf,
+        preview_png,
+    })
+}
+
 /// 拖出：载荷整理与自回环抑制与平台无关，交由平台模块执行
 /// Windows 后台监视（光标跟踪 + 左键释放粘贴）或 macOS 原生拖拽会话。
 #[tauri::command]
 async fn start_clip_drag_monitor(id: String, app: AppHandle) -> Result<(), String> {
     let state: State<AppState> = app.state();
     let payload = state.with_active_store(|store| store.payload_by_id(&id))?;
-    let (hash, contents) = contents_from_payload(payload)?;
+    let drag = build_drag_payload(&id, &payload)?;
 
     {
         let mut ignored = state
             .ignored_hashes
             .lock()
             .map_err(|_| "ignore lock poisoned".to_string())?;
-        ignored.insert(hash.clone(), Instant::now());
+        ignored.insert(drag.hash.clone(), Instant::now());
     }
 
-    platform::start_drag_out(app, hash, contents)
+    platform::start_drag_out(app, drag)
 }
 
 /// 把剪贴卡片导出为可拖出的真实文件列表（浏览器预览/调试用）。

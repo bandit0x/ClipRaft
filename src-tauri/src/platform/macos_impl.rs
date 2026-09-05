@@ -4,15 +4,15 @@
 use std::thread;
 use std::time::Duration;
 
-use clipboard_rs::ClipboardContent;
 use core_foundation::base::{CFType, TCFType};
 use core_foundation::boolean::CFBoolean;
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::{CFString, CFStringRef};
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, CGKeyCode};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
+use super::{DragEnded, DragPayload};
 use crate::AppState;
 
 const KEY_V: CGKeyCode = 0x09; // kVK_ANSI_V
@@ -74,10 +74,27 @@ pub fn send_paste() -> Result<(), String> {
     Ok(())
 }
 
-pub fn start_drag_out(
-    _app: AppHandle,
-    _hash: String,
-    _contents: Vec<ClipboardContent>,
-) -> Result<(), String> {
-    Err("macOS 拖出尚未实现".to_string())
+/// 原生拖出：把载荷派发到主线程启动 NSDraggingSession（无需任何系统权限）。
+/// macOS 上 `run_on_main_thread` 派发后立即返回，落点通过 `drag://ended` 事件回传。
+pub fn start_drag_out(app: AppHandle, payload: DragPayload) -> Result<(), String> {
+    let app_for_thread = app.clone();
+    app.run_on_main_thread(move || {
+        let Some(window) = app_for_thread.get_webview_window("main") else {
+            return;
+        };
+        if let Err(error) = super::drag_out_macos::start_drag(&app_for_thread, &window, &payload) {
+            println!("ClipRaft drag-out failed: {error}");
+            // 失败也要让前端结束拖拽状态
+            let _ = app_for_thread.emit(
+                "drag://ended",
+                DragEnded {
+                    id: payload.id,
+                    x: 0.0,
+                    y: 0.0,
+                    dropped: false,
+                },
+            );
+        }
+    })
+    .map_err(|error| error.to_string())
 }

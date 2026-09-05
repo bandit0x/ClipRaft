@@ -3,7 +3,6 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
-use clipboard_rs::ClipboardContent;
 use tauri::AppHandle;
 use windows_sys::Win32::Foundation::{HWND, POINT};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -124,11 +123,8 @@ pub fn send_paste() -> Result<(), String> {
 /// 拖出粘贴监视：记录卡片内容后，后台轮询全局光标与左键状态——
 /// 不依赖 WebView2 的指针事件（跨窗口拖出时网页事件流会断流）。
 /// 左键释放即：内容写入剪贴板 → 聚焦落点窗口 → 落点点击 → Ctrl+V。
-pub fn start_drag_out(
-    _app: AppHandle,
-    _hash: String,
-    contents: Vec<ClipboardContent>,
-) -> Result<(), String> {
+pub fn start_drag_out(_app: AppHandle, payload: super::DragPayload) -> Result<(), String> {
+    let contents = payload.contents;
     thread::spawn(move || {
         // 等待左键释放（上限 15 秒防挂死），期间持续跟踪全局光标
         let mut last = POINT { x: 0, y: 0 };

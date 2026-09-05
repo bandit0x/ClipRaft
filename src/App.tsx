@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { DragEvent, MutableRefObject, PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import { mountFluidSurface, type FluidRaft } from "./flow/WebGLFluidBackdrop";
@@ -11,6 +12,9 @@ import { mountFluidSurface, type FluidRaft } from "./flow/WebGLFluidBackdrop";
 function isTauriEnv() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
+
+// macOS 拖出走原生 NSDraggingSession，F9 走恢复+粘贴而非拖拽会话
+const isMacPlatform = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
 
 type Modality = "text" | "image" | "file";
 
@@ -205,6 +209,9 @@ function App() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingOverTrash, setDraggingOverTrash] = useState(false);
   const [undoableId, setUndoableId] = useState<string | null>(null);
+  // macOS 原生拖拽期间的状态：用于显示垃圾区并抑制自拖入
+  const [nativeDraggingId, setNativeDraggingId] = useState<string | null>(null);
+  const nativeDraggingRef = useRef(false);
   // 浏览器预览（无 Tauri）直接以展开态打开，方便查看 UI；桌面窗口保持收起启动
   const [expanded, setExpanded] = useState(!isTauriEnv());
   const undoTimerRef = useRef<number | null>(null);
@@ -311,6 +318,7 @@ function App() {
     let unlistenDrop: (() => void) | undefined;
     let unlistenPanel: (() => void) | undefined;
     let unlistenPaste: (() => void) | undefined;
+    let unlistenDrag: (() => void) | undefined;
     let permissionPrompted = false;
     void listen("panel://opened", () => holdPanelOpen())
       .then((cleanup) => { unlistenPanel = cleanup; })
@@ -328,7 +336,34 @@ function App() {
       setCards((current) => [event.payload, ...current.filter((card) => card.id !== event.payload.id)].slice(0, 200));
       setNotice("新木筏已顺流靠岸");
     }).then((cleanup) => { unlisten = cleanup; }).catch(() => undefined);
+    void listen<{ id: string; x: number; y: number; dropped: boolean }>("drag://ended", async (event) => {
+      if (!isMacPlatform) return;
+      nativeDraggingRef.current = false;
+      setNativeDraggingId(null);
+      if (!event.payload.id) return;
+      // 垃圾区判定：落点为屏幕逻辑点（左上原点），垃圾区矩形换算为屏幕物理像素
+      const bay = trashBayRef.current;
+      if (!bay) return;
+      const rect = bay.getBoundingClientRect();
+      try {
+        const [scaleFactor, position] = await Promise.all([
+          getCurrentWebviewWindow().scaleFactor(),
+          getCurrentWebviewWindow().outerPosition(),
+        ]);
+        const px = event.payload.x * scaleFactor;
+        const py = event.payload.y * scaleFactor;
+        const left = position.x + rect.left * scaleFactor;
+        const top = position.y + rect.top * scaleFactor;
+        if (px >= left && px <= left + rect.width * scaleFactor && py >= top && py <= top + rect.height * scaleFactor) {
+          deleteCardRef.current(event.payload.id);
+          setNotice("木筏已拖入漩涡删除");
+        }
+      } catch {
+        // 窗口信息不可用时跳过垃圾区判定
+      }
+    }).then((cleanup) => { unlistenDrag = cleanup; }).catch(() => undefined);
     void getCurrentWebview().onDragDropEvent((event) => {
+      if (nativeDraggingRef.current) return; // macOS 原生拖出经过本窗口，避免自拖入建卡
       if (event.payload.type === "enter") {
         setNotice("把文件放到水面上，让它靠岸");
         return;
@@ -344,7 +379,7 @@ function App() {
         })
         .catch(() => setNotice("文件没有成功靠岸"));
     }).then((cleanup) => { unlistenDrop = cleanup; }).catch(() => undefined);
-    return () => { unlisten?.(); unlistenDrop?.(); unlistenPanel?.(); unlistenPaste?.(); };
+    return () => { unlisten?.(); unlistenDrop?.(); unlistenPanel?.(); unlistenPaste?.(); unlistenDrag?.(); };
   }, [holdPanelOpen, openPanel, refresh]);
   useRaftMotion(cards, refs);
 
@@ -369,6 +404,9 @@ function App() {
     setRaftAnchors(next);
   }, [cards, query, visibleCards.length]);
 
+  // drag://ended 事件监听在组件树外注册一次，需要稳定的 deleteCard 引用
+  const deleteCardRef = useRef<(id: string) => Promise<void>>(async () => undefined);
+
   const deleteCard = async (id: string) => {
     const card = cards.find((item) => item.id === id);
     if (card?.pinned && !window.confirm("这张木筏已固定，确认要将它移出历史吗？")) return;
@@ -385,6 +423,7 @@ function App() {
       setNotice("木筏已离岸，下面的卡片正在向上游补位");
     }, 170);
   };
+  deleteCardRef.current = deleteCard;
 
   const undoDelete = async () => {
     if (!undoableId) return;
@@ -463,10 +502,21 @@ function App() {
     setDraggingOverTrash(false);
   };
 
-  /** 拖出：木筏影子跟手；越阈值即交 Rust 后台监视（光标跟踪 + 左键释放粘贴），
-      此后不再依赖 WebView2 的指针事件（跨窗口会断流） */
+  /** 拖出：Windows 上木筏影子跟手，越阈值即交 Rust 后台监视（光标跟踪 + 左键释放粘贴）；
+      macOS 上交给原生 NSDraggingSession（AppKit 绘制预览，落点经 drag://ended 回传） */
   const startNativeDrag = useCallback(
     (card: ClipCard, origin: { x: number; y: number }) => {
+      if (isMacPlatform) {
+        setNotice("拖动中：松手把内容交给目标窗口");
+        nativeDraggingRef.current = true;
+        setNativeDraggingId(card.id);
+        void invoke("start_clip_drag_monitor", { id: card.id }).catch((error) => {
+          nativeDraggingRef.current = false;
+          setNativeDraggingId(null);
+          setNotice("拖出失败：" + String(error));
+        });
+        return;
+      }
       setNotice("拖动中：松手粘贴到光标下的窗口");
       setGhost({ label: card.preview.slice(0, 26), x: origin.x, y: origin.y, card });
       const move = (event: PointerEvent) => {
@@ -498,14 +548,20 @@ function App() {
     [deleteCard],
   );
 
-  // F9：把最新木筏直接粘贴到光标下的窗口（免拖动）
+  // F9：把最新木筏直接粘贴到前台窗口（免拖动）；macOS 无拖拽会话可借力，直接恢复+粘贴
   useEffect(() => {
     if (!isTauri) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "F9" && cards.length) {
-        void invoke("start_clip_drag_monitor", { id: cards[0].id }).catch((error) => {
-          setNotice("拖出失败：" + String(error));
-        });
+        if (isMacPlatform) {
+          void invoke("restore_clip", { id: cards[0].id, autoPaste: true }).catch((error) => {
+            setNotice("粘贴失败：" + String(error));
+          });
+        } else {
+          void invoke("start_clip_drag_monitor", { id: cards[0].id }).catch((error) => {
+            setNotice("拖出失败：" + String(error));
+          });
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -541,7 +597,7 @@ function App() {
           )) : <div className="empty-water">水面很安静<br /><span>复制一点内容，让木筏靠岸</span></div>}
         </section>
 
-        {(draggingId || ghost) && <button
+        {(draggingId || ghost || nativeDraggingId) && <button
           ref={trashBayRef}
           className={`trash-bay ${draggingOverTrash ? "is-hovered" : ""}`}
           onDragOver={(event) => { event.preventDefault(); setDraggingOverTrash(true); }}
