@@ -48,6 +48,31 @@ function Icon({ name, size = 16 }: { name: string; size?: number }) {
   );
 }
 
+/** 退出按钮：非 key 窗口里 window.confirm 不可靠，改用两段式确认——
+    第一次点击进入确认态，3 秒内再点才真正退出，超时自动还原。 */
+function QuitButton() {
+  const [arming, setArming] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
+  const onClick = () => {
+    if (!arming) {
+      setArming(true);
+      timerRef.current = window.setTimeout(() => setArming(false), 3000);
+      return;
+    }
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    void invoke("quit_app").catch(() => undefined);
+  };
+  return (
+    <button
+      className={`quit-app${arming ? " is-arming" : ""}`}
+      aria-label={arming ? "再次点击确认退出" : "退出 ClipRaft"}
+      title={arming ? "再点一次确认退出" : "退出 ClipRaft"}
+      onClick={onClick}
+    ><Icon name={arming ? "restore" : "close"} size={12} /></button>
+  );
+}
+
 function FlowBackdrop({ rafts }: { rafts: FluidRaft[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controllerRef = useRef<ReturnType<typeof mountFluidSurface> | null>(null);
@@ -657,7 +682,7 @@ function App() {
           <button aria-label="搜索卡片" onClick={() => searchInputRef.current?.focus()}><Icon name="search" /></button>
           <button aria-label={selectedId ? (cards.find((card) => card.id === selectedId)?.pinned ? "取消固定卡片" : "固定卡片") : "先选择卡片"} disabled={!selectedId} onClick={() => { if (selectedId) void togglePinned(selectedId); }}><Icon name="pin" /></button>
           <button aria-label={historyPersistence ? "关闭跨重启历史保留" : "开启跨重启历史保留"} title={historyPersistence ? "关闭历史保留" : "开启历史保留"} onClick={() => void toggleHistoryPersistence()}><Icon name="settings" /></button>
-          {isMacPlatform && <button aria-label="退出 ClipRaft" title="退出 ClipRaft" className="quit-app" onClick={() => { if (window.confirm("退出 ClipRaft？未固定的会话内容将不会保留。")) void invoke("quit_app").catch(() => undefined); }}><Icon name="close" /></button>}
+          {isMacPlatform && <QuitButton />}
         </div>
         <div className="status-strip">
           <span className="status-dot" />
