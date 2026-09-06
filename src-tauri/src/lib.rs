@@ -1468,6 +1468,14 @@ fn set_panel_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
 
 /// 用户显式交互（悬停/点击把手/打开面板）后允许面板取得键盘焦点。
 /// 仅 macOS 需要：复制预览期间窗口被设为不可聚焦（ADR-0002 焦点契约）。
+/// 退出应用（面板关闭按钮）：走事件循环退出，托盘与会话资源一并清理。
+/// Windows 沿用托盘右键退出的既有习惯，此命令仅由 macOS 面板暴露。
+#[tauri::command]
+fn quit_app(app: AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
+}
+
 #[tauri::command]
 fn focus_panel(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -1567,6 +1575,7 @@ pub fn run() {
             set_auto_paste,
             set_panel_expanded,
             focus_panel,
+            quit_app,
             check_paste_permission,
             request_paste_permission
         ])

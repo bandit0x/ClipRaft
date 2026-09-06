@@ -657,6 +657,7 @@ function App() {
           <button aria-label="搜索卡片" onClick={() => searchInputRef.current?.focus()}><Icon name="search" /></button>
           <button aria-label={selectedId ? (cards.find((card) => card.id === selectedId)?.pinned ? "取消固定卡片" : "固定卡片") : "先选择卡片"} disabled={!selectedId} onClick={() => { if (selectedId) void togglePinned(selectedId); }}><Icon name="pin" /></button>
           <button aria-label={historyPersistence ? "关闭跨重启历史保留" : "开启跨重启历史保留"} title={historyPersistence ? "关闭历史保留" : "开启历史保留"} onClick={() => void toggleHistoryPersistence()}><Icon name="settings" /></button>
+          {isMacPlatform && <button aria-label="退出 ClipRaft" title="退出 ClipRaft" className="quit-app" onClick={() => { if (window.confirm("退出 ClipRaft？未固定的会话内容将不会保留。")) void invoke("quit_app").catch(() => undefined); }}><Icon name="close" /></button>}
         </div>
         <div className="status-strip">
           <span className="status-dot" />
