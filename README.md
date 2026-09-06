@@ -42,4 +42,4 @@ npm run build
 npm run tauri build
 ```
 
-项目只使用本地 Git，未配置远程仓库，不执行 `git push`。
+仓库托管在 GitHub（`bandit0x/ClipRaft`），CI 在 Windows 与 macOS 上自动执行测试与构建（`.github/workflows/ci.yml`）。
