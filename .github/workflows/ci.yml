@@ -5,9 +5,9 @@ name: CI
 
 on:
   push:
-    branches: [feature/zcode]
+    branches: [master]
   pull_request:
-    branches: [feature/zcode]
+    branches: [master]
   workflow_dispatch:
 
 permissions:

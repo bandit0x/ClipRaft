@@ -218,30 +218,6 @@ function App() {
   const nativeDraggingRef = useRef(false);
   // 浏览器预览（无 Tauri）直接以展开态打开，方便查看 UI；桌面窗口保持收起启动
   const [expanded, setExpanded] = useState(!isTauriEnv());
-  // 临时诊断：测试模式下在 document 层记录指针事件（验证后移除）
-  useEffect(() => {
-    if (!isTauri) return;
-    let cleanup = () => {};
-    void invoke<boolean>("test_mode")
-      .then((enabled) => {
-        if (!enabled) return;
-        let count = 0;
-        const log = (e: Event) => {
-          count += 1;
-          if (count > 40) return;
-          const pe = e as PointerEvent;
-          const target = (e.target as HTMLElement)?.className;
-          void invoke("test_log", {
-            payload: `[doc] ${e.type} #${count} at ${Math.round(pe.clientX)},${Math.round(pe.clientY)} target=${typeof target === "string" ? target.slice(0, 24) : "?"}`,
-          }).catch(() => undefined);
-        };
-        const types = ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup"];
-        types.forEach((t) => document.addEventListener(t, log, true));
-        cleanup = () => types.forEach((t) => document.removeEventListener(t, log, true));
-      })
-      .catch(() => undefined);
-    return () => cleanup();
-  }, [isTauri]);
   const undoTimerRef = useRef<number | null>(null);
   const autoCollapseTimerRef = useRef<number | null>(null);
   const collapseTimerRef = useRef<number | null>(null);
@@ -409,9 +385,6 @@ function App() {
                   px <= (r.left + r.width) * s &&
                   py >= r.top * s &&
                   py <= (r.top + r.height) * s;
-                void invoke("test_log", {
-                  payload: `[drop] at ${Math.round(px)},${Math.round(py)} bay ${Math.round(r.left * s)},${Math.round(r.top * s)} ${Math.round(r.width * s)}x${Math.round(r.height * s)} hit=${hit}`,
-                }).catch(() => undefined);
                 if (hit) {
                   deleteCardRef.current(draggedId);
                   setNotice("木筏已拖入漩涡删除");
@@ -569,17 +542,12 @@ function App() {
       （聊天框等目标不接受文本拖入，只能以"点击落点 + 粘贴"语义进输入框） */
   const startNativeDrag = useCallback(
     (card: ClipCard, origin: { x: number; y: number }) => {
-      const tlog = (msg: string) => {
-        void invoke("test_log", { payload: msg }).catch(() => undefined);
-      };
-      tlog(`[fe] startNativeDrag kind=${card.kind} mac=${isMacPlatform}`);
       if (isMacPlatform && card.kind !== "text") {
         setNotice("拖动中：松手把内容交给目标窗口；拖回漩涡可删除");
         nativeDraggingRef.current = true;
         nativeDraggingIdRef.current = card.id;
         setNativeDraggingId(card.id);
         void invoke("start_clip_drag_monitor", { id: card.id }).catch((error) => {
-          tlog(`[fe] native invoke failed: ${error}`);
           nativeDraggingRef.current = false;
           nativeDraggingIdRef.current = null;
           setNativeDraggingId(null);
@@ -596,10 +564,7 @@ function App() {
         const r = bay.getBoundingClientRect();
         return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
       };
-      let moveCount = 0;
       const move = (event: PointerEvent) => {
-        moveCount += 1;
-        if (moveCount === 1 || moveCount % 20 === 0) tlog(`[fe] move #${moveCount} at ${Math.round(event.clientX)},${Math.round(event.clientY)}`);
         lastPointerRef.current = { x: event.clientX, y: event.clientY };
         setGhost((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current));
         setDraggingOverTrash(pointerOverTrash(event));
@@ -608,14 +573,11 @@ function App() {
         window.removeEventListener("pointermove", move);
         ghostActiveRef.current = false;
         setGhost(null);
-        setDraggingOverTrash(false);
-        tlog(`[fe] done fired, moves=${moveCount}, pointer=${JSON.stringify(lastPointerRef.current)}`);
         // 松手在面板内：若落在删除区（漩涡）则删除该卡
         const p = lastPointerRef.current;
         const bay = trashBayRef.current;
         if (p && bay) {
           const r = bay.getBoundingClientRect();
-          tlog(`[fe] trash check pointer=(${Math.round(p.x)},${Math.round(p.y)}) rect=(${Math.round(r.left)},${Math.round(r.top)}) ${Math.round(r.width)}x${Math.round(r.height)}`);
           if (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) {
             void deleteCard(card.id);
             setNotice("木筏已拖入漩涡删除");
