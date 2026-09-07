@@ -1,5 +1,7 @@
 # ClipRaft
 
+<img src="public/brand/clipraft.svg" alt="ClipRaft 图标" width="160" />
+
 ClipRaft 是一个本机优先的多模态剪贴板浮窗。它平时只留下贴在屏幕边缘的窄溪把手，复制时自动展开，让文本、图片和文件以一张张小木筏顺流保存。支持 Windows 10/11 与 macOS。
 
 ## 本地开发
