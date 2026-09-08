@@ -886,7 +886,8 @@ fn dock_window(window: &WebviewWindow, physical_width: u32) -> Result<(), String
         .current_monitor()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "ClipRaft monitor unavailable".to_string())?;
-    // macOS 用 work_area 避开菜单栏与程序坞；Windows 保持全屏高度停靠的既有行为
+    // macOS 用 work_area 避开菜单栏与程序坞；Windows 同样贴齐 work_area，
+    // 让面板下沿顶到任务栏上沿（配置里的固定 900 高只在首次创建时兜底）
     #[cfg(target_os = "macos")]
     let (monitor_x, monitor_y, monitor_width) = {
         let area = monitor.work_area();
@@ -900,6 +901,11 @@ fn dock_window(window: &WebviewWindow, physical_width: u32) -> Result<(), String
     );
     let x = monitor_x + monitor_width - physical_width as i32;
     let y = monitor_y;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let area = monitor.work_area();
+        let _ = window.set_size(PhysicalSize::new(physical_width, area.size.height));
+    }
     window
         .set_position(PhysicalPosition::new(x, y))
         .map_err(|error| error.to_string())

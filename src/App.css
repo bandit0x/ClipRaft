@@ -35,10 +35,10 @@ button { border: 0; cursor: pointer; }
 /* 只动 opacity 与 box-shadow：不用 filter（WKWebView 透明窗口上 filter 动画不可靠），对比度足够肉眼可辨 */
 @keyframes handle-breath { 0%, 100% { opacity: .5; box-shadow: 0 0 4px 1px rgba(96, 200, 255, .12); } 50% { opacity: 1; box-shadow: 0 0 18px 5px rgba(130, 215, 255, .8); } }
 
-/* macOS 收起态：整条侧边是一根渐变呼吸灯（青→蓝、上下渐隐），不是溪水条 */
-.mac .creek-world.is-collapsed { background: transparent; }
-.mac .creek-world.is-collapsed .edge-handle { top: 0; right: 0; transform: none; width: 9px; height: 100%; border-radius: 0; background: linear-gradient(180deg, rgba(125, 225, 255, 0) 0%, rgba(125, 225, 255, .5) 16%, rgba(74, 158, 255, .8) 50%, rgba(125, 225, 255, .5) 84%, rgba(125, 225, 255, 0) 100%); animation: edge-breathe 3.4s ease-in-out infinite; }
-.mac .creek-world.is-collapsed .edge-handle span { display: none; }
+/* 收起态：整条侧边是一根渐变呼吸灯（青→蓝、上下渐隐），不是溪水条；全平台一致 */
+.creek-world.is-collapsed { background: transparent; }
+.creek-world.is-collapsed .edge-handle { top: 0; right: 0; transform: none; width: 9px; height: 100%; border-radius: 0; background: linear-gradient(180deg, rgba(125, 225, 255, 0) 0%, rgba(125, 225, 255, .5) 16%, rgba(74, 158, 255, .8) 50%, rgba(125, 225, 255, .5) 84%, rgba(125, 225, 255, 0) 100%); animation: edge-breathe 3.4s ease-in-out infinite; }
+.creek-world.is-collapsed .edge-handle span { display: none; }
 /* 呼吸 = 透明度 + 辉光同步脉动（不用 filter，WKWebView 透明窗口上不可靠） */
 @keyframes edge-breathe { 0%, 100% { opacity: .28; box-shadow: 0 0 6px 1px rgba(96, 200, 255, .08); } 50% { opacity: 1; box-shadow: 0 0 18px 5px rgba(110, 205, 255, .6); } }
 
